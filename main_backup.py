@@ -7,7 +7,6 @@ import os
 ### set the basePath ###
 basePath = '/Users/sheelaahmed/Desktop/NAS/'
 
-
 ### define the trial number ###
 trialNum = 1
 
@@ -26,8 +25,6 @@ MAGENTA = (255, 0, 255)
 YELLOW = (0, 255, 255)
 CYAN = (255, 255, 0)
 
-NFRAMES = 10000000  # 9999
-
 FONT = cv2.FONT_HERSHEY_COMPLEX_SMALL
 
 #######################################################################
@@ -43,29 +40,20 @@ timeStr = time.strftime("%Y-%b-%d_%Hh%Mm")
 dateStr = time.strftime("%Y-%b-%d")
 
 #### make a new directory to store each of the images ###
-assistedCodeDir = ('Video_Code_Results_{}-{}'.format(timeStr, trialNum))
+assistedCodeDir = ('Code_Results_{}-{}'.format(timeStr, trialNum))
 os.makedirs(assistedCodeDir)
 
-# subj = 'mag_advertisements_{}'.format(trialNum)
 
-trial = '00_00_000-27_27_605/'
+#trialPath = subjPath + trial
 
 ### filename stuff for when I move onto the videos ####
-subj = 'NAS_1_S{}'.format(subjNum)
+#videoFname = trialPath + 'world_out.mp4'  # converted video
+#rawVideoFname = 'world.mp4'  # raw mp4 video.
+#fixationCSVfName = trialPath + 'fixations.csv'  # sample csv file with Frame, X, Y of fixations
+
+subj = 'mag_advertisements_{}'.format(trialNum)
 subjPath = basePath + subj
-trialPath = subjPath + trial
 
-### EDIT ###
-videoFname = trialPath+'world_out.mp4'  # converted video
-rawVideoFname = 'world.mp4'  # raw mp4 video.
-fixationCSVfName = trialPath+'fixations.csv'  # sample csv file with Frame, X, Y of fixations
-
-if USE_RAW_MP4:  # use raw mp4 world.mp4 instead of world_viz
-    vidObjDict, trialInfo = ritvid.open_raw_mp4(subjPath + rawVideoFname, trialInfo)
-    vidObjDict['fName'] = rawVideoFname
-    trialInfo['worldObjDict'] = vidObjDict  # Assign world
-
-    videoWH = vidObjDict['width'], vidObjDict['height']
 
 ### time how long it all takes ###
 startTime = time.time()
@@ -74,9 +62,8 @@ startTime = time.time()
 currentFile = 1
 totalFiles = len(os.listdir(subjPath))
 
-while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
 
-# while currentFile < totalFiles:
+while currentFile < totalFiles:
 
     test_img = cv2.imread('{}/mag_ad_{}.JPG'.format(subjPath, currentFile)) #test image
     # img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
