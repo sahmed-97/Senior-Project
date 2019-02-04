@@ -3,20 +3,40 @@ import cv2
 import time
 import functions as fn
 import os
+import pandas as pd
 
 ### set the basePath ###
 basePath = '/Users/sheelaahmed/Desktop/NAS/'
 
-
-### define the trial number ###
-trialNum = 1
+### define subject number ###
+subjNum = 35
 
 ### read in the reference image ###
 ref_img = cv2.imread('time_mag_ref_img.png')  # ref image
 
 
-### define all different colors to use in the rest of the program ###
+### get the current time and date
+timeStr = time.strftime("%Y-%b-%d_%Hh%Mm")
+dateStr = time.strftime("%Y-%b-%d")
 
+#### make a new directory to store each of the images ###
+CodeDir = ('Video_Code_Results_{}-{}'.format(SubjNum, timeStr))
+os.makedirs(CodeDir)
+
+# subj = 'mag_advertisements_{}'.format(trialNum)
+trial = '00_00_000-43_54_973/'
+
+### filename stuff for when I move onto the videos ####
+subj = 'NAS_1_S{}'.format(subjNum)
+subjPath = basePath + subj
+trialPath = subjPath + trial
+
+### define video and csv filenames ###
+videoFname = trialPath+'world_out.mp4'  # converted video
+rawVideoFname = 'world.mp4'  # raw mp4 video.
+fixationCSVfName = trialPath+'fixations.csv'  # sample csv file with Frame, X, Y of fixations
+
+### define all different colors to use in the rest of the program ###
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 GREEN = (0, 255, 0)
@@ -38,34 +58,54 @@ MATCHER = 'FLANN'
 
 PERSPECTIVE_TRANSFORM = False
 
-### get the current time and date
-timeStr = time.strftime("%Y-%b-%d_%Hh%Mm")
-dateStr = time.strftime("%Y-%b-%d")
+################################
+### PUT SETUP_RUN STUFF HERE ### ###include all trialInfo shit ###
+################################
 
-#### make a new directory to store each of the images ###
-assistedCodeDir = ('Video_Code_Results_{}-{}'.format(timeStr, trialNum))
-os.makedirs(assistedCodeDir)
 
-# subj = 'mag_advertisements_{}'.format(trialNum)
+# Read data into a pandas dataframe
+fixationDataPD = pd.read_csv(fixationCSVfName)
 
-trial = '00_00_000-27_27_605/'
+# Calculate the CENTER frame of each fixation and append it as a column to the dataFrame
+ctr_fixation_series = pd.Series((fixationDataPD['start_frame_index'] + fixationDataPD['end_frame_index']) / 2,
+                                name='center_frame')
+fixationDataPD = pd.concat([fixationDataPD, ctr_fixation_series], axis=1)
 
-### filename stuff for when I move onto the videos ####
-subj = 'NAS_1_S{}'.format(subjNum)
-subjPath = basePath + subj
-trialPath = subjPath + trial
+headers = list(fixationDataPD)
 
-### EDIT ###
-videoFname = trialPath+'world_out.mp4'  # converted video
-rawVideoFname = 'world.mp4'  # raw mp4 video.
-fixationCSVfName = trialPath+'fixations.csv'  # sample csv file with Frame, X, Y of fixations
+# Values are given in normalized coordinates: multiply by vidWidth * vidHeight, and invert the vertical dimension
+fixationTable = np.transpose(np.array([fixationDataPD['id'], fixationDataPD['center_frame'], fixationDataPD['start_frame_index'],
+                                       fixationDataPD['duration'], fixationDataPD['norm_pos_x'] * VIDEO_WIDTH,
+                                       VIDEO_HEIGHT - (fixationDataPD['norm_pos_y'] * VIDEO_HEIGHT)]))
+fixationTable = fixationTable.astype(int)  # Convert center frames to integer
+# fixationTable[:, 0] = fixationTable[:,0].astype(int)  # Convert center frames to integer
 
-if USE_RAW_MP4:  # use raw mp4 world.mp4 instead of world_viz
-    vidObjDict, trialInfo = ritvid.open_raw_mp4(subjPath + rawVideoFname, trialInfo)
-    vidObjDict['fName'] = rawVideoFname
-    trialInfo['worldObjDict'] = vidObjDict  # Assign world
+### get number of fixations in the table
+nFixations = len(fixationTable)
 
-    videoWH = vidObjDict['width'], vidObjDict['height']
+fixationsToCode = nFixations - len(ExcludeFixNums)  # The total number of fixations that need to be coded
+
+
+### get dictionary of all elements in raw video ###
+vidObjDict, trialInfo = fn.open_raw_mp4(subjPath + rawVideoFname, trialInfo)
+vidObjDict['fName'] = rawVideoFname
+trialInfo['worldObjDict'] = vidObjDict  # Assign world
+videoWH = vidObjDict['width'], vidObjDict['height']
+
+#### startatFix is in the setup_run function ###
+#### basically move all important stuff from that function into this code ###
+#### only focus on one subject at a time ###
+fixTableIdx = startAtFixNum - 1  # Index into table is fixation# - 1
+
+nextFixationFrame = fixationTable[fixTableIdx, FRAME_]
+
+firstFixationFrame = nextFixationFrame
+
+firstPass = True
+
+currentFrame = 0
+
+outputStringCSVlist = []  # Overall  list to write out to csv file
 
 ### time how long it all takes ###
 startTime = time.time()
@@ -74,56 +114,75 @@ startTime = time.time()
 currentFile = 1
 totalFiles = len(os.listdir(subjPath))
 
+currentFrame = firstFixationFrame
+
 while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
 
 # while currentFile < totalFiles:
 
-    test_img = cv2.imread('{}/mag_ad_{}.JPG'.format(subjPath, currentFile)) #test image
-    # img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+    if currentFrame < firstFixationFrame:
+        ritvid.skip_forward_to_first_desired_frame(vidObjDict['vidObj'], firstFixationFrame, currentFrame,USE_RAW_MP4)
+    # grab the current frame
+    frame, vidObjDict = ritvid.grab_video_frame(vidObjDict, useRawMP4=USE_RAW_MP4, frameNumToRead=nextFixationFrame)
 
-    src_pts, dst_pts, M, mask = fn.feature_detect(test_img, ref_img, method=DETECTOR, matcher=MATCHER)
+    if currentFrame == nextFixationFrame:
 
-    detected_image = fn.object_detect(test_img, ref_img, dst_pts, mask)
+        print('Current frame = {}'.format(currentFrame))
 
-    ### if you want to display the matches between both images ####
-    if PERSPECTIVE_TRANSFORM == True:
-        detected_image = fn.perspectiveTransform(test_img, ref_img, mask, M)
+        ### get fixation information from csv file ###
+        fixPosXY, fixWinUL, fixDur, fixID, inFrame, fixationInfo = ritvid.fetch_fixation_data_from_fixation_table(fixationTable, fixTableIdx, fixBoxHW, vidObjDict,
+                                                           currentFrame)
 
-        cv2.namedWindow('Matches')
-        cv2.imshow('Matches', detected_image)
-        cv2.waitKey()
+
+
+        ##################################################################
+        ### do the feature detection based on the fixation coordinates ###
+        ##################################################################
+
+
+        src_pts, dst_pts, M, mask = fn.feature_detect(test_img, ref_img, method=DETECTOR, matcher=MATCHER)
+
+        detected_image = fn.object_detect(test_img, ref_img, dst_pts, mask)
+
+        ### if you want to display the matches between both images ####
+        if PERSPECTIVE_TRANSFORM == True:
+            detected_image = fn.perspectiveTransform(test_img, ref_img, mask, M)
+
+            cv2.namedWindow('Matches')
+            cv2.imshow('Matches', detected_image)
+            cv2.waitKey()
+            cv2.destroyAllWindows()
+
+        ### hstack both images
+        displayImg = fn.hstack(test_img, detected_image, border=2)
+
+        #####################################
+        ### add text in the new window!!! ###
+        #####################################
+
+        ### create a display image name for each frame/image ###
+        displayImg_name = ('displayImg_{}-'.format(currentFile))
+
+        ### display each resulting window ###
+        cv2.imshow(displayImg_name, displayImg)
+
+        ### waitKey ###
+        k = cv2.waitKey()  # display
+
+        if (k & 0xff) == 27 or (k & 0xff) == 113 or (k & 0xff) == 81: #if Esc, q or Q is pushed
+            k = 'exit' #exit program
+            print('exiting...')
+            sys.exit()
+        #cv2.waitKey()
+
+        ### write out the image into the new directory ###
+        ### to change directory, go to 'assistedCodeDir' line at the top and change to desired directory name ###
+        fname = '{}/{}.png'.format(CodeDir, displayImg_name)
+        cv2.imwrite(fname, displayImg)
         cv2.destroyAllWindows()
 
-    ### hstack both images
-    displayImg = fn.hstack(test_img, detected_image, border=2)
 
-    #####################################
-    ### add text in the new window!!! ###
-    #####################################
 
-    ### create a display image name for each frame/image ###
-    displayImg_name = ('displayImg_{}-'.format(currentFile))
-
-    ### display each resulting window ###
-    cv2.imshow(displayImg_name, displayImg)
-
-    ### waitKey ###
-    k = cv2.waitKey()  # display
-
-    if (k & 0xff) == 27 or (k & 0xff) == 113 or (k & 0xff) == 81: #if Esc, q or Q is pushed
-        k = 'exit' #exit program
-        print('exiting...')
-        sys.exit()
-    #cv2.waitKey()
-
-    ### write out the image into the new directory ###
-    ### to change directory, go to 'assistedCodeDir' line at the top and change to desired directory name ###
-    fname = '{}/{}.png'.format(assistedCodeDir, displayImg_name)
-    cv2.imwrite(fname, displayImg)
-    cv2.destroyAllWindows()
-
-#    mag_ad += 1
-
-    ### print out total time it took ###
+### print out total time it took ###
 elapsedTime = time.time() - startTime
 print('Process is complete. Elapsed time is {}'.format(elapsedTime))

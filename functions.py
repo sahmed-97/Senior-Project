@@ -14,8 +14,136 @@ MAGENTA = (255, 0, 255)
 YELLOW = (0, 255, 255)
 CYAN = (255, 255, 0)
 
+######################################################################################################
+######################################################################################################
+######### this function will be for first getting fixation info from the fixations.csv file ##########
+
+def fetch_fixation_data_from_fixation_table(fixationTable, fixTableIdx, fixBoxHW, vidObjDict,
+                                            currentFrame):
+
+    fixPosXY = fixationTable[fixTableIdx,X_], fixationTable[fixTableIdx,Y_]
+    fixWinUL = [fixPosXY[1] - int(fixBoxHW[H_]/2), fixPosXY[0] - int(fixBoxHW[W_]/2)]  # Note order: U is Y, L is X
+
+    fixDur = fixationTable[fixTableIdx, DUR_]
+    fixID = fixationTable[fixTableIdx, ID_]
+
+    if (fixWinUL[1] < 0) or (fixWinUL[1] > (vidObjDict['width'] - fixBoxHW[W_])) or \
+            (fixWinUL[0] < 0) or (fixWinUL[0] > (vidObjDict['height'] - fixBoxHW[H_])):  # not in frame
+        inFrame = False
+    else:
+        inFrame = True
+
+
+    fixationInfo = {"fixPosXY":fixPosXY, "fixWinUL":fixWinUL, "fixDur":fixDur,
+                    "currentFrame":currentFrame, "fixID":fixID, "inFrame":inFrame,
+                    'matchRatio':None, 'topMatch':None, 'secondMatch':None, }
+
+    return fixPosXY, fixWinUL, fixDur, fixID, inFrame, fixationInfo
+
+
+######################################################################################################
+######################################################################################################
+##### this function will be for using PyAV to open the raw video file and extracting info/frames #####
+
+def open_raw_mp4(rawVidFname, trialInfo):
+    avObj = None  # initialize to null value
+
+    avObj = av.open(rawVidFname)
+    # avObj2 = cv2.videoCapture(rawVidFname)
+    streamObj = next(s for s in avObj.streams if s.type == 'video')
+
+    nFrames = streamObj.frames
+    print(nFrames)
+    ticksPerFrame = streamObj.rate / streamObj.time_base
+    width = streamObj.width
+
+    vidObjDict = {'avObj':avObj, 'streamObj':streamObj,
+                  'nFrames':nFrames, 'ticksPerFrame':ticksPerFrame, 'type':'raw',
+                  'width':streamObj.width, 'height':streamObj.height}
+
+    if trialInfo is not None:  # Allow use without trialInfo
+        # Assign trialInfo vidObjDicts
+        if rawVidFname == trialInfo['eye0Fname']:
+            trialInfo['eye0ObjDict'] = vidObjDict
+        elif rawVidFname == trialInfo['eye1Fname']:
+            trialInfo['eye1ObjDict'] = vidObjDict
+        else:
+            trialInfo['worldObjDict'] = vidObjDict
+
+    return vidObjDict, trialInfo, ticksPerFrame  #  avObj, streamObj, nFrames, ticksPerFrame
+
+######################################################################################################
+######################################################################################################
+############ this function will be for grabbing the needed frame in the raw video file ###############
+
+def grab_video_frame(vidObjDict, ticksPerFrame, useRawMP4=True, frameNumToRead=0):
+
+    if vidObjDict['type'] == 'raw':
+        # With raw mp4, we can go directly to the next fixation frame instead of stepping through each frame ...
+        frame = None  # initialize to default return value
+
+        if frameNumToRead is not None:  # if a frame# is given, seek to it
+            # To seek to a specific frame number:
+            frameNumToRead = max(frameNumToRead,0)  # don't allow negative frame numbers
+            frameNumToRead = min(frameNumToRead,streamObj.frames-2)  # don't allow frame numbers > nFrames
+
+            seekTicks = int(frameNumToRead * ticksPerFrame)
+            if verbose: print('Seeking to frame frameNumToRead: {}'.format(frameNumToRead))
+            streamObj.seek(seekTicks)
+        else:  # read the next available frame
+            frameNumToRead = -1  # Flag to indicate 'take next'
+
+        for packet in avObj.demux(streamObj):  # even if I only want one frame, I have to demux bc of compression
+            for frame in packet.decode():
+                frameNum = packet.pts / ticksPerFrame
+
+                if frameNumToRead == -1:
+                    frameNumToRead = frameNum
+
+                npImg = np.array(np.frombuffer(frame.to_rgb().planes[0].to_bytes(), dtype = np.uint8)).reshape(streamObj.height, streamObj.width, 3)
+            frame = cv2.cvtColor(npImg, cv2.COLOR_RGB2BGR)
+
+            if frameNum == frameNumToRead:  # Got it; return
+                break
+    else:  # using converted video files with buffer
+        # Grab the next frame (from buffer, or file if needed)
+        (grabbed, frame) = vidObjDict['vidObj'].read()
+
+    time2 = time.time()
+
+    vidObjDict['currentFrame'] = frameNumToRead
+
+    return frame, vidObjDict
+
+######################################################################################################
+######################################################################################################
+#### this function will be to skip forward in the video to show first frame with needed fixation #####
+
+def skip_forward_to_first_desired_frame(vidObj, firstFixationFrame, currentFrame, USE_RAW_MP4):
+
+    time0 = time.time()
+    while currentFrame < firstFixationFrame:  # Don't bother displaying frames until we are at the first one of interest
+
+        if USE_RAW_MP4:
+            pass  # No need to seek when using raw video
+        else:
+            if (firstFixationFrame - currentFrame) > 100:
+                print("Jumping ahead to firstFixationFrame.  currentFrame = {} firstFixationFrame = {} (jumping to {})"
+                      .format(currentFrame, firstFixationFrame, firstFixationFrame-9))
+                # Speed things up by jumping to the next frame
+                vidObj.set(1, (firstFixationFrame-50))  # jump forward to almost the frame you want.
+                currentFrame = firstFixationFrame-50  # Update counter
+            # grab the current frame
+            (grabbed, frame) = vidObj.read()
+
+        currentFrame = currentFrame + 1
+        time1 = time.time()
+
+    return None
+
 ##############################################################################################################
 ##############################################################################################################
+####################################### initial feature detection ############################################
 
 def feature_detect(test_img, ref_img, method=DETECTOR, matcher=MATCHER):
 
@@ -84,6 +212,7 @@ def feature_detect(test_img, ref_img, method=DETECTOR, matcher=MATCHER):
 
 ##############################################################################################################
 ##############################################################################################################
+############################## object detection for the test images ##########################################
 
 def object_detect(test_img, ref_img, dst_pts, mask):
 
@@ -144,8 +273,14 @@ def object_detect(test_img, ref_img, dst_pts, mask):
 
 ##############################################################################################################
 ##############################################################################################################
+############# this function will be the MAIN one to complete the object detection in the frames ##############
+
+### EDIT THIS ONE TO WORK FOR THE FIXATION TABLE AND ALL THAT SHIT ###
 
 def object_detection_fixation(test_img, ref_image, fixation_xy):
+
+    #### USE SEGMENTS_FROM_IMAGE CODE TO GET THE NUMBER OF ROWS AND COLUMNS IN REFERENCE IMAGE ###
+    ######## TO THEN USE IN THIS FUNCTION###
 
     ### height and width of ref image ###
     ref_img_height, ref_img_width = ref_img.shape[:2]
@@ -182,8 +317,10 @@ def object_detection_fixation(test_img, ref_image, fixation_xy):
 
     return img3
 
+############################################################################################################
+############################################################################################################
+######### This part of code draws matches and does perspective transform for feature matching ###############
 
-    ######### This part of code draws matches and does perspective transform for feature matching ###############
 def perspectiveTransform(test_img, ref_img, mask, M):
 
     height,width = file.shape[:2]
@@ -214,6 +351,8 @@ def perspectiveTransform(test_img, ref_img, mask, M):
 
 ##############################################################################################################
 ##############################################################################################################
+################### this function is used to stick two images next to each other horizontally ################
+
 def hstack(imgL, imgR, border=0, verbose=False):
     # horizontally concatenate two images. If different depths, make both color
 
@@ -298,6 +437,8 @@ def hstack(imgL, imgR, border=0, verbose=False):
 
 ##############################################################################################################
 ##############################################################################################################
+################# this function is used to stick two images/windows next to each other verically #############
+
 def vstack_images(imgT, imgB, border=0):
     # vertically concatenate two images. If different depths, make both color
     # optionally, add a border between them
@@ -378,8 +519,9 @@ def vstack_images(imgT, imgB, border=0):
 
     return stackImg
 
-##############################################################################################################
-##############################################################################################################
+####################################################################################################
+####################################################################################################
+########## can determine the number of segments in the reference image based on the filename #######
 
 def determine_segments_from_fname_and_image(fname, img, verbose=False):
     # Look for grid size in filename using regular expressions
@@ -403,109 +545,6 @@ def determine_segments_from_fname_and_image(fname, img, verbose=False):
         nColsImg = refImgWidth // segW
 
     return imgIsSegmented, segW, segH, nRowsImg, nColsImg
-
-######################################################################################################
-######################################################################################################
-
-def open_raw_mp4(rawVidFname, trialInfo):
-    avObj = None  # initialize to null value
-
-    avObj = av.open(rawVidFname)
-    # avObj2 = cv2.videoCapture(rawVidFname)
-    streamObj = next(s for s in avObj.streams if s.type == 'video')
-
-    nFrames = streamObj.frames
-    print(nFrames)
-    ticksPerFrame = streamObj.rate / streamObj.time_base
-    width = streamObj.width
-
-    vidObjDict = {'avObj':avObj, 'streamObj':streamObj,
-                  'nFrames':nFrames, 'ticksPerFrame':ticksPerFrame, 'type':'raw',
-                  'width':streamObj.width, 'height':streamObj.height}
-
-    if trialInfo is not None:  # Allow use without trialInfo
-        # Assign trialInfo vidObjDicts
-        if rawVidFname == trialInfo['eye0Fname']:
-            trialInfo['eye0ObjDict'] = vidObjDict
-        elif rawVidFname == trialInfo['eye1Fname']:
-            trialInfo['eye1ObjDict'] = vidObjDict
-        else:
-            trialInfo['worldObjDict'] = vidObjDict
-
-    return vidObjDict, trialInfo, ticksPerFrame  #  avObj, streamObj, nFrames, ticksPerFrame
-
-######################################################################################################
-######################################################################################################
-
-def grab_video_frame(vidObjDict, ticksPerFrame, useRawMP4=True, frameNumToRead=0):
-
-    if vidObjDict['type'] == 'raw':
-        # With raw mp4, we can go directly to the next fixation frame instead of stepping through each frame ...
-        frame = None  # initialize to default return value
-
-        if frameNumToRead is not None:  # if a frame# is given, seek to it
-            # To seek to a specific frame number:
-            frameNumToRead = max(frameNumToRead,0)  # don't allow negative frame numbers
-            frameNumToRead = min(frameNumToRead,streamObj.frames-2)  # don't allow frame numbers > nFrames
-
-            seekTicks = int(frameNumToRead * ticksPerFrame)
-            if verbose: print('Seeking to frame frameNumToRead: {}'.format(frameNumToRead))
-            streamObj.seek(seekTicks)
-        else:  # read the next available frame
-            frameNumToRead = -1  # Flag to indicate 'take next'
-
-        for packet in avObj.demux(streamObj):  # even if I only want one frame, I have to demux bc of compression
-            for frame in packet.decode():
-                frameNum = packet.pts / ticksPerFrame
-
-                if frameNumToRead == -1:
-                    frameNumToRead = frameNum
-
-                npImg = np.array(np.frombuffer(frame.to_rgb().planes[0].to_bytes(), dtype = np.uint8)).reshape(streamObj.height, streamObj.width, 3)
-            frame = cv2.cvtColor(npImg, cv2.COLOR_RGB2BGR)
-
-            if frameNum == frameNumToRead:  # Got it; return
-                break
-    else:  # using converted video files with buffer
-        # Grab the next frame (from buffer, or file if needed)
-        (grabbed, frame) = vidObjDict['vidObj'].read()
-
-    time2 = time.time()
-
-    vidObjDict['currentFrame'] = frameNumToRead
-
-    return frame, vidObjDict
-
-######################################################################################################
-######################################################################################################
-
-def skip_forward_to_first_desired_frame(vidObj, firstFixationFrame, currentFrame, USE_RAW_MP4):
-
-    time0 = time.time()
-    while currentFrame < firstFixationFrame:  # Don't bother displaying frames until we are at the first one of interest
-
-        if USE_RAW_MP4:
-            pass  # No need to seek when using raw video
-        else:
-            if (firstFixationFrame - currentFrame) > 100:
-                print("Jumping ahead to firstFixationFrame.  currentFrame = {} firstFixationFrame = {} (jumping to {})"
-                      .format(currentFrame, firstFixationFrame, firstFixationFrame-9))
-                # Speed things up by jumping to the next frame
-                vidObj.set(1, (firstFixationFrame-50))  # jump forward to almost the frame you want.
-                currentFrame = firstFixationFrame-50  # Update counter
-            # grab the current frame
-            (grabbed, frame) = vidObj.read()
-
-        currentFrame = currentFrame + 1
-        time1 = time.time()
-
-        # if we are viewing a video and we did not grab a
-        # frame, then we have reached the end of the video
-        if not USE_RAW_MP4:
-            if not grabbed:  # if using old video routines, and no frame was grabbed:
-                break
-
-    return None
 
 ######################################################################################################
 ######################################################################################################
