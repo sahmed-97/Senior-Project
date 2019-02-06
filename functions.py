@@ -1,5 +1,11 @@
 import cv2
 import numpy as np
+import re
+import time
+import sys
+
+from ID_assisted_defs import ID_, CTR_FRAME_, START_FRAME_, DUR_, X_, Y_  # Indices into fixationTable
+from ID_assisted_defs import H_, W_  # fixBoxHW[]
 
 DETECTOR = 'SIFT'
 
@@ -14,29 +20,32 @@ MAGENTA = (255, 0, 255)
 YELLOW = (0, 255, 255)
 CYAN = (255, 255, 0)
 
+FONT = cv2.FONT_HERSHEY_COMPLEX_SMALL
+
+
 ####################################################################################################
 ####################################################################################################
 ########## can determine the number of segments in the reference image based on the filename #######
 
-def determine_segments_from_fname_and_image(fname, img, verbose=False):
+def determine_segments_from_fname_and_image(fname, img):
     # Look for grid size in filename using regular expressions
     sizePattern = re.compile('\d+')  # Regular expression: look for multi-character integers
     segmentWHList = sizePattern.findall(fname)  # Returns list of integers found in filename
 
     if len(segmentWHList) == 2:  # There are two integers; assume that they are segW and segH
-    segW = int(segmentWHList[0])
-    segH = int(segmentWHList[1])
-    print("Based on filename '{}', assume reference image is made up of {} x {} regions"
-    .format(fname, segW, segH))
-    imgIsSegmented = True
+        segW = int(segmentWHList[0])
+        segH = int(segmentWHList[1])
+        print("Based on filename '{}', assume reference image is made up of {} x {} regions"
+            .format(fname, segW, segH))
+        imgIsSegmented = True
 
-    # if segH > segW:  # Looks like a portrait image
-    #     VERTICAL_REF_IMAGE = True  # Show vertical reference image to left of video
+        # if segH > segW:  # Looks like a portrait image
+        #     VERTICAL_REF_IMAGE = True  # Show vertical reference image to left of video
 
-    # How many rows and columns of items are there in the reference image?
-    refImgHeight, refImgWidth  = img.shape[0:2]
+        # How many rows and columns of items are there in the reference image?
+        refImgHeight, refImgWidth  = img.shape[0:2]
 
-    nRowsImg = refImgHeight // segH
+        nRowsImg = refImgHeight // segH
     nColsImg = refImgWidth // segW
 
     return imgIsSegmented, segW, segH, nRowsImg, nColsImg
@@ -72,7 +81,7 @@ def fetch_fixation_data_from_fixation_table(fixationTable, fixTableIdx, fixBoxHW
 ######################################################################################################
 ##### this function will be for using PyAV to open the raw video file and extracting info/frames #####
 
-def open_raw_mp4(rawVidFname, trialInfo):
+def open_raw_mp4(rawVidFname):
     avObj = None  # initialize to null value
 
     avObj = av.open(rawVidFname)
@@ -88,22 +97,17 @@ def open_raw_mp4(rawVidFname, trialInfo):
                   'nFrames':nFrames, 'ticksPerFrame':ticksPerFrame, 'type':'raw',
                   'width':streamObj.width, 'height':streamObj.height}
 
-    if trialInfo is not None:  # Allow use without trialInfo
-        # Assign trialInfo vidObjDicts
-        if rawVidFname == trialInfo['eye0Fname']:
-            trialInfo['eye0ObjDict'] = vidObjDict
-        elif rawVidFname == trialInfo['eye1Fname']:
-            trialInfo['eye1ObjDict'] = vidObjDict
-        else:
-            trialInfo['worldObjDict'] = vidObjDict
 
-    return vidObjDict, trialInfo, ticksPerFrame  #  avObj, streamObj, nFrames, ticksPerFrame
+    return vidObjDict, avObj, streamObj, ticksPerFrame  #  avObj, streamObj, nFrames, ticksPerFrame
+
 
 ######################################################################################################
 ######################################################################################################
 ############ this function will be for grabbing the needed frame in the raw video file ###############
 
-def grab_video_frame(vidObjDict, ticksPerFrame, useRawMP4=True, frameNumToRead=0):
+def grab_video_frame(avObj, streamObj, vidObjDict, ticksPerFrame, frameNumToRead=0):
+
+    streamObj = vidObjDict['streamObj']
 
     if vidObjDict['type'] == 'raw':
         # With raw mp4, we can go directly to the next fixation frame instead of stepping through each frame ...
@@ -115,7 +119,6 @@ def grab_video_frame(vidObjDict, ticksPerFrame, useRawMP4=True, frameNumToRead=0
             frameNumToRead = min(frameNumToRead,streamObj.frames-2)  # don't allow frame numbers > nFrames
 
             seekTicks = int(frameNumToRead * ticksPerFrame)
-            if verbose: print('Seeking to frame frameNumToRead: {}'.format(frameNumToRead))
             streamObj.seek(seekTicks)
         else:  # read the next available frame
             frameNumToRead = -1  # Flag to indicate 'take next'
@@ -146,22 +149,20 @@ def grab_video_frame(vidObjDict, ticksPerFrame, useRawMP4=True, frameNumToRead=0
 ######################################################################################################
 #### this function will be to skip forward in the video to show first frame with needed fixation #####
 
-def skip_forward_to_first_desired_frame(vidObj, firstFixationFrame, currentFrame, USE_RAW_MP4):
+def skip_forward_to_first_desired_frame(vidObj, firstFixationFrame, currentFrame):
 
     time0 = time.time()
     while currentFrame < firstFixationFrame:  # Don't bother displaying frames until we are at the first one of interest
 
-        if USE_RAW_MP4:
-            pass  # No need to seek when using raw video
-        else:
-            if (firstFixationFrame - currentFrame) > 100:
-                print("Jumping ahead to firstFixationFrame.  currentFrame = {} firstFixationFrame = {} (jumping to {})"
-                      .format(currentFrame, firstFixationFrame, firstFixationFrame-9))
-                # Speed things up by jumping to the next frame
-                vidObj.set(1, (firstFixationFrame-50))  # jump forward to almost the frame you want.
-                currentFrame = firstFixationFrame-50  # Update counter
-            # grab the current frame
-            (grabbed, frame) = vidObj.read()
+
+        if (firstFixationFrame - currentFrame) > 100:
+            print("Jumping ahead to firstFixationFrame.  currentFrame = {} firstFixationFrame = {} (jumping to {})"
+                .format(currentFrame, firstFixationFrame, firstFixationFrame-9))
+            # Speed things up by jumping to the next frame
+            vidObj.set(1, (firstFixationFrame-50))  # jump forward to almost the frame you want.
+            currentFrame = firstFixationFrame-50  # Update counter
+        # grab the current frame
+        (grabbed, frame) = vidObj.read()
 
         currentFrame = currentFrame + 1
         time1 = time.time()
@@ -234,7 +235,7 @@ def feature_detect(frame, ref_img, method=DETECTOR, matcher=MATCHER):
     M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
     matchesMask = mask.ravel().tolist()
 
-    return src_pts, dst_pts, M, mask
+    return src_pts, dst_pts, M, mask, matchesMask
 
 ##############################################################################################################
 ##############################################################################################################
@@ -296,14 +297,14 @@ def object_detect(ref_img, dst_pts, mask):
 ############################################################################################################
 ######### This part of code draws matches and does perspective transform for feature matching ###############
 
-def perspectiveTransform(frame, ref_img, mask, M):
+def perspectiveTransform(file, ref_img, kp1, kp2, good, matches, matchesMask, mask, M, method=DETECTOR):
 
     height,width = file.shape[:2]
     pts = np.float32([[0,0], [0,height-1], [width-1,height-1], [width-1,0]]).reshape(-1,1,2)
     ### do a perspective transform
     dst = cv2.perspectiveTransform(pts,M)
 
-    img2 = cv2.polylines(ref_img,[np.int32(dst)],True,255,3, cv2.LINE_AA)
+    img3 = cv2.polylines(ref_img,[np.int32(dst)],True,255,3, cv2.LINE_AA)
 
     draw_params = dict(matchColor = (255,0,0), singlePointColor = None,
         matchesMask = matchesMask,flags=2)
@@ -328,16 +329,13 @@ def perspectiveTransform(frame, ref_img, mask, M):
 ##############################################################################################################
 ################### this function is used to stick two images next to each other horizontally ################
 
-def hstack(imgL, imgR, border=0, verbose=False):
+def hstack(imgL, imgR, border=0):
     # horizontally concatenate two images. If different depths, make both color
 
-    def add_border(imgL, borderImg, verbose=False):
+    def add_border(imgL, borderImg):
         # horizontally concatenate one image with a border.
 
         shapeL, shapeBorder = imgL.shape, borderImg.shape
-        if verbose:
-            print("shapeL = {}".format(shapeL))
-
         if len(shapeL) != len(shapeBorder):  # Images are different bit depths
             if len(shapeL) == 2:  # imgT is grayscale; convert it to BGR
                 imgT = cv2.cvtColor(imgL, cv2.COLOR_GRAY2BGR)
@@ -498,7 +496,7 @@ def vstack_images(imgT, imgB, border=0):
 ######################################################################################################
 ######################################################################################################
 
-def display_image(ref_img,test_img, index_x, index_y, obj_height, obj_width)
+def display_image(ref_img,test_img, index_x, index_y, obj_height, obj_width):
 
     ### draw circle around the initial index coordinate (optional) ###
     result = cv2.circle(ref_img, (index_x, index_y), 10, WHITE, 3)
@@ -507,10 +505,10 @@ def display_image(ref_img,test_img, index_x, index_y, obj_height, obj_width)
     result = cv2.rectangle(ref_img, (index_x, index_y), (index_x + obj_width, index_y+obj_height), GREEN, 6)
 
     ### hstack final image with the frame ###
-    displayImg = fn.hstack(test_img, result, border=2)
+    displayImg = hstack(test_img, result, border=2)
 
     ### create a display image name for each frame/image ###
-    displayImg_name = ('displayImg_{}-'.format(currentFrame))
+    displayImg_name = ('displayImg_{}-'.format(test_img))
 
     ### display each resulting window ###
     cv2.imshow(displayImg_name, displayImg)
@@ -548,7 +546,7 @@ def display_image(ref_img,test_img, index_x, index_y, obj_height, obj_width)
 ##############################################################################################################
 ############################## object detection for the test images ##########################################
 
-def object_detect(test_img, ref_img, dst_pts, mask):
+def object_detect_test(test_img, ref_img, dst_pts, mask):
 
     ### squeeze dst pts to make a (67,2) array
     dst_pts = np.squeeze(dst_pts, axis=1)

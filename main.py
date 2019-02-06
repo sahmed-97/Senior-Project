@@ -1,3 +1,6 @@
+from ID_assisted_defs import ID_, CTR_FRAME_, START_FRAME_, DUR_, X_, Y_  # Indices into fixationTable
+from ID_assisted_defs import H_, W_  # fixBoxHW[]
+
 import numpy as np
 import cv2
 import time
@@ -14,13 +17,15 @@ subjNum = 35
 ### read in the reference image ###
 ref_img = cv2.imread('time_mag_ref_img.png')  # ref image
 
+### define width and height of the fixation box ###
+fixBoxHW = (199,199)
 
 ### get the current time and date
 timeStr = time.strftime("%Y-%b-%d_%Hh%Mm")
 dateStr = time.strftime("%Y-%b-%d")
 
 #### make a new directory to store each of the images ###
-CodeDir = ('Video_Code_Results_{}-{}'.format(SubjNum, timeStr))
+CodeDir = ('Video_Code_Results_{}-{}'.format(subjNum, timeStr))
 os.makedirs(CodeDir)
 
 # subj = 'mag_advertisements_{}'.format(trialNum)
@@ -65,10 +70,17 @@ MATCHER = 'FLANN'
 
 PERSPECTIVE_TRANSFORM = False
 
+VIDEO_WIDTH = 1280  # default - can be overwritten by raw video
+VIDEO_HEIGHT = 720  # default
+
 ################################
-### PUT SETUP_RUN STUFF HERE ### ###include all trialInfo shit ###
+### PUT SETUP_RUN STUFF HERE ###
 ################################
 
+
+##############################################
+#####comment all of these lines as well ######
+##############################################
 
 # Read data into a pandas dataframe
 fixationDataPD = pd.read_csv(fixationCSVfName)
@@ -78,6 +90,7 @@ ctr_fixation_series = pd.Series((fixationDataPD['start_frame_index'] + fixationD
                                 name='center_frame')
 fixationDataPD = pd.concat([fixationDataPD, ctr_fixation_series], axis=1)
 
+FRAME_ = START_FRAME_
 headers = list(fixationDataPD)
 
 # Values are given in normalized coordinates: multiply by vidWidth * vidHeight, and invert the vertical dimension
@@ -90,20 +103,19 @@ fixationTable = fixationTable.astype(int)  # Convert center frames to integer
 ### get number of fixations in the table
 nFixations = len(fixationTable)
 
-fixationsToCode = nFixations - len(ExcludeFixNums)  # The total number of fixations that need to be coded
-print("nFixations = {} - excluded fixations {} = {} fixations to code".format(nFixations, len(ExcludeFixNums), fixationsToCode))
+fixationsToCode = nFixations - len(exclude_fixations)  # The total number of fixations that need to be coded
+print("nFixations = {} - excluded fixations {} = {} fixations to code".format(nFixations, len(exclude_fixations), fixationsToCode))
 
 
 ### get dictionary of all elements in raw video ###
-vidObjDict, trialInfo = fn.open_raw_mp4(subjPath + rawVideoFname, trialInfo)
+vidObjDict, avObj, streamObj, ticksPerFrame = fn.open_raw_mp4(subjPath + rawVideoFname)
 vidObjDict['fName'] = rawVideoFname
-trialInfo['worldObjDict'] = vidObjDict  # Assign world
 videoWH = vidObjDict['width'], vidObjDict['height']
 
 #### startatFix is in the setup_run function ###
 #### basically move all important stuff from that function into this code ###
 #### only focus on one subject at a time ###
-fixTableIdx = startAtFixNum - 1  # Index into table is fixation# - 1
+fixTableIdx = start_fixation - 1  # Index into table is fixation# - 1
 
 nextFixationFrame = fixationTable[fixTableIdx, FRAME_]
 
@@ -111,16 +123,12 @@ firstFixationFrame = nextFixationFrame
 
 firstPass = True
 
-currentFrame = 0
-
-outputStringCSVlist = []  # Overall  list to write out to csv file
-
 ### time how long it all takes ###
 startTime = time.time()
 
 ### define the current file and total number of files in the subj path ###
-currentFile = 1
-totalFiles = len(os.listdir(subjPath))
+#currentFile = 1
+#totalFiles = len(os.listdir(subjPath))
 
 currentFrame = firstFixationFrame
 img_index = 0
@@ -130,9 +138,14 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
 # while currentFile < totalFiles:
 
     if currentFrame < firstFixationFrame:
-        fn.skip_forward_to_first_desired_frame(vidObjDict['vidObj'], firstFixationFrame, currentFrame,USE_RAW_MP4)
+        fn.skip_forward_to_first_desired_frame(vidObjDict['vidObj'], firstFixationFrame, currentFrame)
     # grab the current frame
-    frame, vidObjDict = fn.grab_video_frame(vidObjDict, useRawMP4=USE_RAW_MP4, frameNumToRead=nextFixationFrame)
+    frame, vidObjDict = fn.grab_video_frame(avObj, streamObj, vidObjDict, ticksPerFrame, frameNumToRead=nextFixationFrame)
+
+    currentFrame = vidObjDict['currentFrame']
+
+    fixPosXY = [0.0, 0.0]
+    fixWinUL = [0.0, 0.0]
 
     if currentFrame == nextFixationFrame:
 
@@ -146,14 +159,14 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         ### do the feature detection based on the fixation coordinates ###
         ##################################################################
 
-        src_pts, dst_pts, M, mask = fn.feature_detect(test_img, ref_img, method=DETECTOR, matcher=MATCHER)
+        src_pts, dst_pts, M, mask = fn.feature_detect(currentFrame, ref_img, method=DETECTOR, matcher=MATCHER)
 
         ### edit this as well to match parameters and outputs ###
         index_x, index_y, obj_height, obj_width = fn.object_detect(ref_img, dst_pts, mask)
 
         ### if you want to display the matches between both images ####
         if PERSPECTIVE_TRANSFORM == True:
-            detected_image = fn.perspectiveTransform(test_img, ref_img, mask, M)
+            detected_image = fn.perspectiveTransform(currentFrame, ref_img, mask, M)
 
             cv2.namedWindow('Matches')
             cv2.imshow('Matches', detected_image)
@@ -168,7 +181,7 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         #####################################
 
         ### create a display image name for each frame/image ###
-        displayImg_name = ('displayImg_{}-'.format(currentFile))
+        displayImg_name = ('displayImg_{}-'.format(currentFrame))
 
         ### display each resulting window ###
         displayImg = fn.display_image(ref_img, currentFrame, index_x, index_y, obj_height, obj_width)
@@ -181,18 +194,27 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         img_index += 1
 
         # If the next fixation is in the list of exclusions, skip through them
-        while fixTableIdx in ExcludeFixNums:
+        while fixTableIdx in exclude_fixations:
             print("fixTableIdx {} is in the list of excluded fixations; skipping it ...".format(fixTableIdx))
             fixTableIdx = fixTableIdx + 1   # prepare for next fixation in table
 
         # Check for end of trial
-        if fixTableIdx < min(EndAtFixNum, (nFixations - 1)):
+        if fixTableIdx < min(end_fixation, (nFixations - 1)):
             nextFixationFrame = fixationTable[fixTableIdx, FRAME_]
         else:
             break
-    else:
-        break
 
+    else:  # then currentFrame != nextFixationFrame:  # so don't process it:
+        # Note: There are occasionally errors in the fixation files where adjacent fixations have the same frame number.
+        # This leads to loops where we just keep seeking higher frames, since we are already past the frame we wanted.
+        # So check for the special case where currentFrame > nextFixation frame:
+
+        if currentFrame > nextFixationFrame:  # Error in fixation.csv file - skip this fixation and go to the next one
+            fixTableIdx = fixTableIdx + 1  # prepare for next fixation in table
+            if fixTableIdx < min(end_fixation, (nFixations - 1)):
+                nextFixationFrame = fixationTable[fixTableIdx, FRAME_]
+            else:
+                break
 
 cv2.destroyAllWindows()
 ### print out total time it took ###
