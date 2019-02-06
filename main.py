@@ -31,6 +31,13 @@ subj = 'NAS_1_S{}'.format(subjNum)
 subjPath = basePath + subj
 trialPath = subjPath + trial
 
+start_fixation = 369  # 330  # S28: Frames 6160 - 26350 = Fixations 300 - 3451
+end_fixation = 3323  # to code all
+
+exclude_fixations = []  # default if no fixations are excluded
+exclude_fixations = list(np.r_[648:805, 1003:1711, 2290:2645])  # Don't code any fixations in these ranges
+
+
 ### define video and csv filenames ###
 videoFname = trialPath+'world_out.mp4'  # converted video
 rawVideoFname = 'world.mp4'  # raw mp4 video.
@@ -84,6 +91,7 @@ fixationTable = fixationTable.astype(int)  # Convert center frames to integer
 nFixations = len(fixationTable)
 
 fixationsToCode = nFixations - len(ExcludeFixNums)  # The total number of fixations that need to be coded
+print("nFixations = {} - excluded fixations {} = {} fixations to code".format(nFixations, len(ExcludeFixNums), fixationsToCode))
 
 
 ### get dictionary of all elements in raw video ###
@@ -115,34 +123,33 @@ currentFile = 1
 totalFiles = len(os.listdir(subjPath))
 
 currentFrame = firstFixationFrame
+img_index = 0
 
 while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
 
 # while currentFile < totalFiles:
 
     if currentFrame < firstFixationFrame:
-        ritvid.skip_forward_to_first_desired_frame(vidObjDict['vidObj'], firstFixationFrame, currentFrame,USE_RAW_MP4)
+        fn.skip_forward_to_first_desired_frame(vidObjDict['vidObj'], firstFixationFrame, currentFrame,USE_RAW_MP4)
     # grab the current frame
-    frame, vidObjDict = ritvid.grab_video_frame(vidObjDict, useRawMP4=USE_RAW_MP4, frameNumToRead=nextFixationFrame)
+    frame, vidObjDict = fn.grab_video_frame(vidObjDict, useRawMP4=USE_RAW_MP4, frameNumToRead=nextFixationFrame)
 
     if currentFrame == nextFixationFrame:
 
         print('Current frame = {}'.format(currentFrame))
 
         ### get fixation information from csv file ###
-        fixPosXY, fixWinUL, fixDur, fixID, inFrame, fixationInfo = ritvid.fetch_fixation_data_from_fixation_table(fixationTable, fixTableIdx, fixBoxHW, vidObjDict,
+        fixPosXY, fixWinUL, fixDur, fixID, inFrame, fixationInfo = fn.fetch_fixation_data_from_fixation_table(fixationTable, fixTableIdx, fixBoxHW, vidObjDict,
                                                            currentFrame)
-
-
 
         ##################################################################
         ### do the feature detection based on the fixation coordinates ###
         ##################################################################
 
-
         src_pts, dst_pts, M, mask = fn.feature_detect(test_img, ref_img, method=DETECTOR, matcher=MATCHER)
 
-        detected_image = fn.object_detect(test_img, ref_img, dst_pts, mask)
+        ### edit this as well to match parameters and outputs ###
+        index_x, index_y, obj_height, obj_width = fn.object_detect(ref_img, dst_pts, mask)
 
         ### if you want to display the matches between both images ####
         if PERSPECTIVE_TRANSFORM == True:
@@ -154,7 +161,7 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
             cv2.destroyAllWindows()
 
         ### hstack both images
-        displayImg = fn.hstack(test_img, detected_image, border=2)
+        # displayImg = fn.hstack(test_img, detected_image, border=2)
 
         #####################################
         ### add text in the new window!!! ###
@@ -164,25 +171,30 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         displayImg_name = ('displayImg_{}-'.format(currentFile))
 
         ### display each resulting window ###
-        cv2.imshow(displayImg_name, displayImg)
-
-        ### waitKey ###
-        k = cv2.waitKey()  # display
-
-        if (k & 0xff) == 27 or (k & 0xff) == 113 or (k & 0xff) == 81: #if Esc, q or Q is pushed
-            k = 'exit' #exit program
-            print('exiting...')
-            sys.exit()
-        #cv2.waitKey()
+        displayImg = fn.display_image(ref_img, currentFrame, index_x, index_y, obj_height, obj_width)
+        # cv2.imshow(displayImg_name, displayImg)
 
         ### write out the image into the new directory ###
         ### to change directory, go to 'assistedCodeDir' line at the top and change to desired directory name ###
         fname = '{}/{}.png'.format(CodeDir, displayImg_name)
         cv2.imwrite(fname, displayImg)
-        cv2.destroyAllWindows()
+        img_index += 1
+
+        # If the next fixation is in the list of exclusions, skip through them
+        while fixTableIdx in ExcludeFixNums:
+            print("fixTableIdx {} is in the list of excluded fixations; skipping it ...".format(fixTableIdx))
+            fixTableIdx = fixTableIdx + 1   # prepare for next fixation in table
+
+        # Check for end of trial
+        if fixTableIdx < min(EndAtFixNum, (nFixations - 1)):
+            nextFixationFrame = fixationTable[fixTableIdx, FRAME_]
+        else:
+            break
+    else:
+        break
 
 
-
+cv2.destroyAllWindows()
 ### print out total time it took ###
 elapsedTime = time.time() - startTime
 print('Process is complete. Elapsed time is {}'.format(elapsedTime))

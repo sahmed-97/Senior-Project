@@ -14,6 +14,33 @@ MAGENTA = (255, 0, 255)
 YELLOW = (0, 255, 255)
 CYAN = (255, 255, 0)
 
+####################################################################################################
+####################################################################################################
+########## can determine the number of segments in the reference image based on the filename #######
+
+def determine_segments_from_fname_and_image(fname, img, verbose=False):
+    # Look for grid size in filename using regular expressions
+    sizePattern = re.compile('\d+')  # Regular expression: look for multi-character integers
+    segmentWHList = sizePattern.findall(fname)  # Returns list of integers found in filename
+
+    if len(segmentWHList) == 2:  # There are two integers; assume that they are segW and segH
+    segW = int(segmentWHList[0])
+    segH = int(segmentWHList[1])
+    print("Based on filename '{}', assume reference image is made up of {} x {} regions"
+    .format(fname, segW, segH))
+    imgIsSegmented = True
+
+    # if segH > segW:  # Looks like a portrait image
+    #     VERTICAL_REF_IMAGE = True  # Show vertical reference image to left of video
+
+    # How many rows and columns of items are there in the reference image?
+    refImgHeight, refImgWidth  = img.shape[0:2]
+
+    nRowsImg = refImgHeight // segH
+    nColsImg = refImgWidth // segW
+
+    return imgIsSegmented, segW, segH, nRowsImg, nColsImg
+
 ######################################################################################################
 ######################################################################################################
 ######### this function will be for first getting fixation info from the fixations.csv file ##########
@@ -145,8 +172,7 @@ def skip_forward_to_first_desired_frame(vidObj, firstFixationFrame, currentFrame
 ##############################################################################################################
 ####################################### initial feature detection ############################################
 
-def feature_detect(test_img, ref_img, method=DETECTOR, matcher=MATCHER):
-
+def feature_detect(frame, ref_img, method=DETECTOR, matcher=MATCHER):
 
 ###various feature detection methods...
 
@@ -162,7 +188,7 @@ def feature_detect(test_img, ref_img, method=DETECTOR, matcher=MATCHER):
         det = cv2.ORB_create()
 
 
-    kp1, des1 = det.detectAndCompute(test_img, None)
+    kp1, des1 = det.detectAndCompute(frame, None)
     kp2, des2 = det.detectAndCompute(ref_img, None)
 
 
@@ -212,9 +238,10 @@ def feature_detect(test_img, ref_img, method=DETECTOR, matcher=MATCHER):
 
 ##############################################################################################################
 ##############################################################################################################
-############################## object detection for the test images ##########################################
+############# this function will be the MAIN one to complete the object detection in the frames ##############
+### EDIT THIS ONE TO WORK FOR THE FIXATION TABLE AND ALL THAT SHIT ###
 
-def object_detect(test_img, ref_img, dst_pts, mask):
+def object_detect(ref_img, dst_pts, mask):
 
     ### squeeze dst pts to make a (67,2) array
     dst_pts = np.squeeze(dst_pts, axis=1)
@@ -231,97 +258,45 @@ def object_detect(test_img, ref_img, dst_pts, mask):
         else:
             total_nonzero += 1
 
-    ### sum up the coordinates and set equal to the total x and y ###
-    x_total, y_total = np.sum(coords, axis = 0)
+            ### sum up the coordinates and set equal to the total x and y ###
+            x_total, y_total = np.sum(coords, axis = 0)
 
-    ### height and width of ref image ###
-    ref_img_height, ref_img_width = ref_img.shape[:2]
+            ### height and width of ref image ###
+            ref_img_height, ref_img_width = ref_img.shape[:2]
 
-    ### may need to define the number of rows and columns in ref image corresponding to the number of objects within ###
-    ### if 3x2 objects, set rows to 2 and columns to 3
-    ref_img_rows = 2
-    ref_img_cols = 3
+            ### may need to define the number of rows and columns in ref image corresponding to the number of objects within ###
+            ### if 3x2 objects, set rows to 2 and columns to 3
+            ref_img_rows = 2
+            ref_img_cols = 3
 
-    ### define the height and width of the object to be the total ref img height/width divided by the rows and columns ###
-    ### if ref img height = 240 snd there are 4 rows, obj height will be 60 ###
-    obj_height = int(ref_img_height/ref_img_rows)
-    obj_width = int(ref_img_width/ref_img_cols)
+            ### define the height and width of the object to be the total ref img height/width divided by the rows and columns ###
+            ### if ref img height = 240 snd there are 4 rows, obj height will be 60 ###
+            obj_height = int(ref_img_height/ref_img_rows)
+            obj_width = int(ref_img_width/ref_img_cols)
 
-    ### find the avg coordinate by dividing the total sum by the number of nonzero coordinates ###
-    ### basically finding single coordinate point that averages out all coordinates ###
-    ### location will be where highest concentration of coordinates are, ergo the best matching region ###
-    x_avg = x_total/total_nonzero
-    y_avg = y_total/total_nonzero
+            ### find the avg coordinate by dividing the total sum by the number of nonzero coordinates ###
+            ### basically finding single coordinate point that averages out all coordinates ###
+            ### location will be where highest concentration of coordinates are, ergo the best matching region ###
+            x_avg = x_total/total_nonzero
+            y_avg = y_total/total_nonzero
 
-    ### create index x and y points
-    index_x = int(x_avg/obj_width)
-    index_y = int(y_avg/obj_height)
+            ### create index x and y points
+            index_x = int(x_avg/obj_width)
+            index_y = int(y_avg/obj_height)
 
-    ### multiple indexes by the obj height and width to make index be size of each object ###
-    ### change in index moves one object at a time rather than one pixel at a time ###
-    index_x = int((index_x) * obj_width)
-    index_y = int((index_y) * obj_height)
+            ### multiple indexes by the obj height and width to make index be size of each object ###
+            ### change in index moves one object at a time rather than one pixel at a time ###
+            index_x = int((index_x) * obj_width)
+            index_y = int((index_y) * obj_height)
 
-    ### draw circle around the initial index coordinate (optional) ###
-    img3 = cv2.circle(ref_img, (x_avg, y_avg), 10, WHITE, 3)
-
-    ### create rectangle starting at index point and making second point be index + obj height/width ###
-    img3 = cv2.rectangle(ref_img, (index_x, index_y), (index_x + obj_width, index_y+obj_height), GREEN, 8)
-
-
-    return img3
-
-##############################################################################################################
-##############################################################################################################
-############# this function will be the MAIN one to complete the object detection in the frames ##############
-
-### EDIT THIS ONE TO WORK FOR THE FIXATION TABLE AND ALL THAT SHIT ###
-
-def object_detection_fixation(test_img, ref_image, fixation_xy):
-
-    #### USE SEGMENTS_FROM_IMAGE CODE TO GET THE NUMBER OF ROWS AND COLUMNS IN REFERENCE IMAGE ###
-    ######## TO THEN USE IN THIS FUNCTION###
-
-    ### height and width of ref image ###
-    ref_img_height, ref_img_width = ref_img.shape[:2]
-
-    ### may need to define the number of rows and columns in ref image corresponding to the number of objects within ###
-    ### if 3x2 objects, set rows to 2 and columns to 3
-    ref_img_rows = 2
-    ref_img_cols = 3
-
-    ### define the height and width of the object to be the total ref img height/width divided by the rows and columns ###
-    ### if ref img height = 240 snd there are 4 rows, obj height will be 60 ###
-    obj_height = int(ref_img_height/ref_img_rows)
-    obj_width = int(ref_img_width/ref_img_cols)
-
-    ### define x and y positions from the given fixation from the table ###
-    x_pos = fixation_xy[0]
-    y_pos = fixation_xy[1]
-
-    ### create index x and y points
-    index_x = int(x_pos/obj_width)
-    index_y = int(y_pos/obj_height)
-
-    ### multiple indexes by the obj height and width to make index be size of each object ###
-    ### change in index moves one object at a time rather than one pixel at a time ###
-    index_x = int((index_x) * obj_width)
-    index_y = int((index_y) * obj_height)
-
-    ### draw circle around the initial index coordinate (optional) ###
-    img3 = cv2.circle(ref_img, (index_x, index_y), 10, WHITE, 3)
-
-    ### create rectangle starting at index point and making second point be index + obj height/width ###
-    img3 = cv2.rectangle(ref_img, (index_x, index_y), (index_x + obj_width, index_y+obj_height), GREEN, 6)
-
-
-    return img3
+    ### return these four coords to draw a rectangle in display_image function ###
+    return index_x, index_y, obj_height, obj_width
 
 ############################################################################################################
 ############################################################################################################
 ######### This part of code draws matches and does perspective transform for feature matching ###############
 
-def perspectiveTransform(test_img, ref_img, mask, M):
+def perspectiveTransform(frame, ref_img, mask, M):
 
     height,width = file.shape[:2]
     pts = np.float32([[0,0], [0,height-1], [width-1,height-1], [width-1,0]]).reshape(-1,1,2)
@@ -519,41 +494,37 @@ def vstack_images(imgT, imgB, border=0):
 
     return stackImg
 
-####################################################################################################
-####################################################################################################
-########## can determine the number of segments in the reference image based on the filename #######
-
-def determine_segments_from_fname_and_image(fname, img, verbose=False):
-    # Look for grid size in filename using regular expressions
-    sizePattern = re.compile('\d+')  # Regular expression: look for multi-character integers
-    segmentWHList = sizePattern.findall(fname)  # Returns list of integers found in filename
-
-    if len(segmentWHList) == 2:  # There are two integers; assume that they are segW and segH
-        segW = int(segmentWHList[0])
-        segH = int(segmentWHList[1])
-        print("Based on filename '{}', assume reference image is made up of {} x {} regions"
-              .format(fname, segW, segH))
-        imgIsSegmented = True
-
-        # if segH > segW:  # Looks like a portrait image
-        #     VERTICAL_REF_IMAGE = True  # Show vertical reference image to left of video
-
-        # How many rows and columns of items are there in the reference image?
-        refImgHeight, refImgWidth  = img.shape[0:2]
-
-        nRowsImg = refImgHeight // segH
-        nColsImg = refImgWidth // segW
-
-    return imgIsSegmented, segW, segH, nRowsImg, nColsImg
 
 ######################################################################################################
 ######################################################################################################
 
-######################################################################################################
-######################################################################################################
+def display_image(ref_img,test_img, index_x, index_y, obj_height, obj_width)
 
-######################################################################################################
-######################################################################################################
+    ### draw circle around the initial index coordinate (optional) ###
+    result = cv2.circle(ref_img, (index_x, index_y), 10, WHITE, 3)
+
+    ### create rectangle starting at index point and making second point be index + obj height/width ###
+    result = cv2.rectangle(ref_img, (index_x, index_y), (index_x + obj_width, index_y+obj_height), GREEN, 6)
+
+    ### hstack final image with the frame ###
+    displayImg = fn.hstack(test_img, result, border=2)
+
+    ### create a display image name for each frame/image ###
+    displayImg_name = ('displayImg_{}-'.format(currentFrame))
+
+    ### display each resulting window ###
+    cv2.imshow(displayImg_name, displayImg)
+
+    ### waitKey ###
+    k = cv2.waitKey()  # display
+
+    if (k & 0xff) == 27 or (k & 0xff) == 113 or (k & 0xff) == 81: #if Esc, q or Q is pushed
+        k = 'exit' #exit program
+        print('exiting...')
+        sys.exit()
+    #cv2.waitKey()
+
+    return displayImg
 
 ######################################################################################################
 ######################################################################################################
@@ -566,6 +537,73 @@ def determine_segments_from_fname_and_image(fname, img, verbose=False):
 
 ######################################################################################################
 ######################################################################################################
+
+######################################################################################################
+######################################################################################################
+
+######################################################################################################
+######################################################################################################
+
+##############################################################################################################
+##############################################################################################################
+############################## object detection for the test images ##########################################
+
+def object_detect(test_img, ref_img, dst_pts, mask):
+
+    ### squeeze dst pts to make a (67,2) array
+    dst_pts = np.squeeze(dst_pts, axis=1)
+
+    ### multiple dst pts by the mask to get the coordinate points in the reference image
+    coords = dst_pts * mask
+
+    ### want to find all coordinates that aren't 0,0. ###
+    ### iterate through coordinates and add to the total_nonzero count if coordinates aren't 0,0 ###
+    total_nonzero = 0
+    for (x,y) in coords:
+        if (x,y) == (0,0):
+            continue
+        else:
+            total_nonzero += 1
+
+            ### sum up the coordinates and set equal to the total x and y ###
+            x_total, y_total = np.sum(coords, axis = 0)
+
+            ### height and width of ref image ###
+            ref_img_height, ref_img_width = ref_img.shape[:2]
+
+            ### may need to define the number of rows and columns in ref image corresponding to the number of objects within ###
+            ### if 3x2 objects, set rows to 2 and columns to 3
+            ref_img_rows = 2
+            ref_img_cols = 3
+
+            ### define the height and width of the object to be the total ref img height/width divided by the rows and columns ###
+            ### if ref img height = 240 snd there are 4 rows, obj height will be 60 ###
+            obj_height = int(ref_img_height/ref_img_rows)
+            obj_width = int(ref_img_width/ref_img_cols)
+
+            ### find the avg coordinate by dividing the total sum by the number of nonzero coordinates ###
+            ### basically finding single coordinate point that averages out all coordinates ###
+            ### location will be where highest concentration of coordinates are, ergo the best matching region ###
+            x_avg = x_total/total_nonzero
+            y_avg = y_total/total_nonzero
+
+            ### create index x and y points
+            index_x = int(x_avg/obj_width)
+            index_y = int(y_avg/obj_height)
+
+            ### multiple indexes by the obj height and width to make index be size of each object ###
+            ### change in index moves one object at a time rather than one pixel at a time ###
+            index_x = int((index_x) * obj_width)
+            index_y = int((index_y) * obj_height)
+
+            ### draw circle around the initial index coordinate (optional) ###
+            img3 = cv2.circle(ref_img, (x_avg, y_avg), 10, WHITE, 3)
+
+            ### create rectangle starting at index point and making second point be index + obj height/width ###
+            img3 = cv2.rectangle(ref_img, (index_x, index_y), (index_x + obj_width, index_y+obj_height), GREEN, 8)
+
+
+            return img3
 
 ######################################################################################################
 ######################################################################################################
