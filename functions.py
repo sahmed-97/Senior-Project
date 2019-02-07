@@ -103,6 +103,30 @@ def open_raw_mp4(rawVidFname):
 
 ######################################################################################################
 ######################################################################################################
+#### this function will be to skip forward in the video to show first frame with needed fixation #####
+
+def skip_forward_to_first_desired_frame(vidObj, firstFixationFrame, currentFrame):
+
+    time0 = time.time()
+    while currentFrame < firstFixationFrame:  # Don't bother displaying frames until we are at the first one of interest
+
+
+    if (firstFixationFrame - currentFrame) > 100:
+        print("Jumping ahead to firstFixationFrame.  currentFrame = {} firstFixationFrame = {} (jumping to {})"
+        .format(currentFrame, firstFixationFrame, firstFixationFrame-9))
+        # Speed things up by jumping to the next frame
+        vidObj.set(1, (firstFixationFrame-50))  # jump forward to almost the frame you want.
+        currentFrame = firstFixationFrame-50  # Update counter
+        # grab the current frame
+        (grabbed, frame) = vidObj.read()
+
+        currentFrame = currentFrame + 1
+        time1 = time.time()
+
+        return None
+
+######################################################################################################
+######################################################################################################
 ############ this function will be for grabbing the needed frame in the raw video file ###############
 
 def grab_video_frame(avObj, streamObj, vidObjDict, ticksPerFrame, frameNumToRead=0):
@@ -144,30 +168,6 @@ def grab_video_frame(avObj, streamObj, vidObjDict, ticksPerFrame, frameNumToRead
     vidObjDict['currentFrame'] = frameNumToRead
 
     return frame, vidObjDict
-
-######################################################################################################
-######################################################################################################
-#### this function will be to skip forward in the video to show first frame with needed fixation #####
-
-def skip_forward_to_first_desired_frame(vidObj, firstFixationFrame, currentFrame):
-
-    time0 = time.time()
-    while currentFrame < firstFixationFrame:  # Don't bother displaying frames until we are at the first one of interest
-
-
-        if (firstFixationFrame - currentFrame) > 100:
-            print("Jumping ahead to firstFixationFrame.  currentFrame = {} firstFixationFrame = {} (jumping to {})"
-                .format(currentFrame, firstFixationFrame, firstFixationFrame-9))
-            # Speed things up by jumping to the next frame
-            vidObj.set(1, (firstFixationFrame-50))  # jump forward to almost the frame you want.
-            currentFrame = firstFixationFrame-50  # Update counter
-        # grab the current frame
-        (grabbed, frame) = vidObj.read()
-
-        currentFrame = currentFrame + 1
-        time1 = time.time()
-
-    return None
 
 ##############################################################################################################
 ##############################################################################################################
@@ -499,7 +499,7 @@ def vstack_images(imgT, imgB, border=0):
 def display_image(ref_img,test_img, index_x, index_y, obj_height, obj_width):
 
     ### draw circle around the initial index coordinate (optional) ###
-    result = cv2.circle(ref_img, (index_x, index_y), 10, WHITE, 3)
+    result = cv2.circle(ref_img, (index_x, index_y), 12, WHITE, 3)
 
     ### create rectangle starting at index point and making second point be index + obj height/width ###
     result = cv2.rectangle(ref_img, (index_x, index_y), (index_x + obj_width, index_y+obj_height), GREEN, 6)

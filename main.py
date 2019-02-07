@@ -78,6 +78,9 @@ VIDEO_HEIGHT = 720  # default
 ################################
 
 
+segmentedReferenceImage, segW, segH, nRowsRefImg, nColsRefImg = \
+    fn.determine_segments_from_fname_and_image(refImgFname, refImg)
+
 ##############################################
 #####comment all of these lines as well ######
 ##############################################
@@ -152,8 +155,7 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         print('Current frame = {}'.format(currentFrame))
 
         ### get fixation information from csv file ###
-        fixPosXY, fixWinUL, fixDur, fixID, inFrame, fixationInfo = fn.fetch_fixation_data_from_fixation_table(fixationTable, fixTableIdx, fixBoxHW, vidObjDict,
-                                                           currentFrame)
+        # fixPosXY, fixWinUL, fixDur, fixID, inFrame, fixationInfo = fn.fetch_fixation_data_from_fixation_table(fixationTable, fixTableIdx, fixBoxHW, vidObjDict, currentFrame)
 
         ##################################################################
         ### do the feature detection based on the fixation coordinates ###
@@ -184,7 +186,7 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         displayImg_name = ('displayImg_{}-'.format(currentFrame))
 
         ### display each resulting window ###
-        displayImg = fn.display_image(ref_img, currentFrame, index_x, index_y, obj_height, obj_width)
+        displayImg = fn.display_image(ref_img, frame, index_x, index_y, obj_height, obj_width)
         # cv2.imshow(displayImg_name, displayImg)
 
         ### write out the image into the new directory ###
@@ -204,13 +206,17 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         else:
             break
 
-    else:  # then currentFrame != nextFixationFrame:  # so don't process it:
-        # Note: There are occasionally errors in the fixation files where adjacent fixations have the same frame number.
-        # This leads to loops where we just keep seeking higher frames, since we are already past the frame we wanted.
-        # So check for the special case where currentFrame > nextFixation frame:
+    ###### if currentFrame != nextFixationFrame, don't process it ######
+    else:
+        ### Note: There are occasionally errors in the fixation files where adjacent fixations have the same frame number. ###
+        ### This leads to loops where we just keep seeking higher frames, since we are already past the frame we wanted. ###
+        ### So check for the special case where currentFrame > nextFixation frame ###
 
-        if currentFrame > nextFixationFrame:  # Error in fixation.csv file - skip this fixation and go to the next one
-            fixTableIdx = fixTableIdx + 1  # prepare for next fixation in table
+        ### Error in fixation.csv file - skip this fixation and go to the next one ###
+        if currentFrame > nextFixationFrame:
+
+            ### prepare for next fixation in table ###
+            fixTableIdx = fixTableIdx + 1
             if fixTableIdx < min(end_fixation, (nFixations - 1)):
                 nextFixationFrame = fixationTable[fixTableIdx, FRAME_]
             else:
