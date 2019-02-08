@@ -7,15 +7,18 @@ import time
 import functions as fn
 import os
 import pandas as pd
+import av
 
 ### set the basePath ###
 basePath = '/Users/sheelaahmed/Desktop/NAS/'
+
+refImgFname = basePath + 'RefImg_Series_205x490.jpg'
 
 ### define subject number ###
 subjNum = 35
 
 ### read in the reference image ###
-ref_img = cv2.imread('time_mag_ref_img.png')  # ref image
+ref_img = cv2.imread(refImgFname)  # ref image
 
 ### define width and height of the fixation box ###
 fixBoxHW = (199,199)
@@ -32,7 +35,7 @@ os.makedirs(CodeDir)
 trial = '00_00_000-43_54_973/'
 
 ### filename stuff for when I move onto the videos ####
-subj = 'NAS_1_S{}'.format(subjNum)
+subj = 'NAS_1_S{}/'.format(subjNum)
 subjPath = basePath + subj
 trialPath = subjPath + trial
 
@@ -79,7 +82,7 @@ VIDEO_HEIGHT = 720  # default
 
 
 segmentedReferenceImage, segW, segH, nRowsRefImg, nColsRefImg = \
-    fn.determine_segments_from_fname_and_image(refImgFname, refImg)
+    fn.determine_segments_from_fname_and_image(refImgFname, ref_img)
 
 ##############################################
 #####comment all of these lines as well ######
@@ -155,16 +158,18 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         print('Current frame = {}'.format(currentFrame))
 
         ### get fixation information from csv file ###
-        # fixPosXY, fixWinUL, fixDur, fixID, inFrame, fixationInfo = fn.fetch_fixation_data_from_fixation_table(fixationTable, fixTableIdx, fixBoxHW, vidObjDict, currentFrame)
+        fixPosXY, fixWinUL, fixDur, fixID, inFrame, fixationInfo = fn.fetch_fixation_data_from_fixation_table(fixationTable, fixTableIdx, fixBoxHW, vidObjDict, currentFrame)
+
+        fixRegionImg = frame[fixWinUL[0]:fixWinUL[0] + fixBoxHW[H_], fixWinUL[1]:fixWinUL[1] + fixBoxHW[W_]].copy()
 
         ##################################################################
         ### do the feature detection based on the fixation coordinates ###
         ##################################################################
 
-        src_pts, dst_pts, M, mask = fn.feature_detect(currentFrame, ref_img, method=DETECTOR, matcher=MATCHER)
+        src_pts, dst_pts, M, mask, matchesMask = fn.feature_detect(frame, ref_img, method=DETECTOR, matcher=MATCHER)
 
         ### edit this as well to match parameters and outputs ###
-        index_x, index_y, obj_height, obj_width = fn.object_detect(ref_img, dst_pts, mask)
+        index_x, index_y, obj_height, obj_width = fn.object_detect(ref_img, dst_pts, segW, segH, nRowsRefImg, nColsRefImg, mask)
 
         ### if you want to display the matches between both images ####
         if PERSPECTIVE_TRANSFORM == True:
@@ -222,7 +227,9 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
             else:
                 break
 
+    currentFrame = currentFrame + 1
+
 cv2.destroyAllWindows()
 ### print out total time it took ###
 elapsedTime = time.time() - startTime
-print('Process is complete. Elapsed time is {}'.format(elapsedTime))
+print('Subject {} process is complete. Elapsed time is {} for {} frames'.format(subjNum, elapsedTime, currentFrame))

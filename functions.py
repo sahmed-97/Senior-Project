@@ -3,6 +3,7 @@ import numpy as np
 import re
 import time
 import sys
+import av
 
 from ID_assisted_defs import ID_, CTR_FRAME_, START_FRAME_, DUR_, X_, Y_  # Indices into fixationTable
 from ID_assisted_defs import H_, W_  # fixBoxHW[]
@@ -111,19 +112,18 @@ def skip_forward_to_first_desired_frame(vidObj, firstFixationFrame, currentFrame
     while currentFrame < firstFixationFrame:  # Don't bother displaying frames until we are at the first one of interest
 
 
-    if (firstFixationFrame - currentFrame) > 100:
-        print("Jumping ahead to firstFixationFrame.  currentFrame = {} firstFixationFrame = {} (jumping to {})"
-        .format(currentFrame, firstFixationFrame, firstFixationFrame-9))
-        # Speed things up by jumping to the next frame
-        vidObj.set(1, (firstFixationFrame-50))  # jump forward to almost the frame you want.
-        currentFrame = firstFixationFrame-50  # Update counter
-        # grab the current frame
-        (grabbed, frame) = vidObj.read()
+        if (firstFixationFrame - currentFrame) > 100:
+            print("Jumping ahead to firstFixationFrame.  currentFrame = {} firstFixationFrame = {} (jumping to {})".format(currentFrame, firstFixationFrame, firstFixationFrame-9))
+            # Speed things up by jumping to the next frame
+            vidObj.set(1, (firstFixationFrame-50))  # jump forward to almost the frame you want.
+            currentFrame = firstFixationFrame-50  # Update counter
+            # grab the current frame
+            (grabbed, frame) = vidObj.read()
 
         currentFrame = currentFrame + 1
         time1 = time.time()
 
-        return None
+    return None
 
 ######################################################################################################
 ######################################################################################################
@@ -242,7 +242,7 @@ def feature_detect(frame, ref_img, method=DETECTOR, matcher=MATCHER):
 ############# this function will be the MAIN one to complete the object detection in the frames ##############
 ### EDIT THIS ONE TO WORK FOR THE FIXATION TABLE AND ALL THAT SHIT ###
 
-def object_detect(ref_img, dst_pts, mask):
+def object_detect(ref_img, dst_pts, segW, segH, nRowsImg, nColsImg, mask):
 
     ### squeeze dst pts to make a (67,2) array
     dst_pts = np.squeeze(dst_pts, axis=1)
@@ -267,8 +267,8 @@ def object_detect(ref_img, dst_pts, mask):
 
             ### may need to define the number of rows and columns in ref image corresponding to the number of objects within ###
             ### if 3x2 objects, set rows to 2 and columns to 3
-            ref_img_rows = 2
-            ref_img_cols = 3
+            ref_img_rows = nRowsImg
+            ref_img_cols = nColsImg
 
             ### define the height and width of the object to be the total ref img height/width divided by the rows and columns ###
             ### if ref img height = 240 snd there are 4 rows, obj height will be 60 ###
