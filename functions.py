@@ -40,9 +40,6 @@ def determine_segments_from_fname_and_image(fname, img):
             .format(fname, segW, segH))
         imgIsSegmented = True
 
-        # if segH > segW:  # Looks like a portrait image
-        #     VERTICAL_REF_IMAGE = True  # Show vertical reference image to left of video
-
         # How many rows and columns of items are there in the reference image?
         refImgHeight, refImgWidth  = img.shape[0:2]
 
@@ -57,43 +54,55 @@ def determine_segments_from_fname_and_image(fname, img):
 
 def fetch_fixation_data_from_fixation_table(fixationTable, fixTableIdx, fixBoxHW, vidObjDict,
                                             currentFrame):
+    ### this code will get fixation information from the fixations.csv file that is exported after running thru PupilPlayer ###
 
+    ### define column of coordinate points from the fixation table ###
     fixPosXY = fixationTable[fixTableIdx,X_], fixationTable[fixTableIdx,Y_]
-    fixWinUL = [fixPosXY[1] - int(fixBoxHW[H_]/2), fixPosXY[0] - int(fixBoxHW[W_]/2)]  # Note order: U is Y, L is X
 
+    ### Note order: U is Y, L is X ###
+    fixWinUL = [fixPosXY[1] - int(fixBoxHW[H_]/2), fixPosXY[0] - int(fixBoxHW[W_]/2)]
+
+    ### get duration of fixations (fixDur) and ??? (fixID) ###
     fixDur = fixationTable[fixTableIdx, DUR_]
     fixID = fixationTable[fixTableIdx, ID_]
 
+    ### if the fixation is not in the frame of the video, set a boolean to inFrame ###
     if (fixWinUL[1] < 0) or (fixWinUL[1] > (vidObjDict['width'] - fixBoxHW[W_])) or \
             (fixWinUL[0] < 0) or (fixWinUL[0] > (vidObjDict['height'] - fixBoxHW[H_])):  # not in frame
         inFrame = False
     else:
         inFrame = True
 
-
+    ### return dictionary of all the elements from fixations.csv ###
     fixationInfo = {"fixPosXY":fixPosXY, "fixWinUL":fixWinUL, "fixDur":fixDur,
                     "currentFrame":currentFrame, "fixID":fixID, "inFrame":inFrame,
                     'matchRatio':None, 'topMatch':None, 'secondMatch':None, }
 
     return fixPosXY, fixWinUL, fixDur, fixID, inFrame, fixationInfo
 
-
 ######################################################################################################
 ######################################################################################################
 ##### this function will be for using PyAV to open the raw video file and extracting info/frames #####
 
 def open_raw_mp4(rawVidFname):
-    avObj = None  # initialize to null value
 
+    ### initialize to null value ###
+    avObj = None
+
+    ### open the video using PyAV ###
     avObj = av.open(rawVidFname)
-    # avObj2 = cv2.videoCapture(rawVidFname)
+
+    ### define the stream object that extracts the individual frames in the video ###
     streamObj = next(s for s in avObj.streams if s.type == 'video')
 
+    ### get number of frames ###
     nFrames = streamObj.frames
-    print(nFrames)
+
+    ### get ??? idk what the ticksPerFrame really is --> ask Jeff ###
     ticksPerFrame = streamObj.rate / streamObj.time_base
     width = streamObj.width
 
+    ### return video object dictionary with all the elements ###
     vidObjDict = {'avObj':avObj, 'streamObj':streamObj,
                   'nFrames':nFrames, 'ticksPerFrame':ticksPerFrame, 'type':'raw',
                   'width':streamObj.width, 'height':streamObj.height}
@@ -108,20 +117,26 @@ def open_raw_mp4(rawVidFname):
 
 def skip_forward_to_first_desired_frame(vidObj, firstFixationFrame, currentFrame):
 
-    time0 = time.time()
-    while currentFrame < firstFixationFrame:  # Don't bother displaying frames until we are at the first one of interest
+    ### loop through frames within the frames of interest ###
+    ### want to start at the first fixation and move forward ###
+    while currentFrame < firstFixationFrame:
 
-
+        ### keep skipping forward through frames until I reach the frame I want ###
         if (firstFixationFrame - currentFrame) > 100:
             print("Jumping ahead to firstFixationFrame.  currentFrame = {} firstFixationFrame = {} (jumping to {})".format(currentFrame, firstFixationFrame, firstFixationFrame-9))
-            # Speed things up by jumping to the next frame
-            vidObj.set(1, (firstFixationFrame-50))  # jump forward to almost the frame you want.
-            currentFrame = firstFixationFrame-50  # Update counter
-            # grab the current frame
+
+            ### Speed things up by jumping to the next frame ###
+            ### jump forward to almost the frame you want. ###
+            vidObj.set(1, (firstFixationFrame-50))
+
+            ### update counter ###
+            currentFrame = firstFixationFrame-50
+
+            ### grab the current frame ###
             (grabbed, frame) = vidObj.read()
 
+        ### iterature through loop ###
         currentFrame = currentFrame + 1
-        time1 = time.time()
 
     return None
 
@@ -131,11 +146,15 @@ def skip_forward_to_first_desired_frame(vidObj, firstFixationFrame, currentFrame
 
 def grab_video_frame(avObj, streamObj, vidObjDict, ticksPerFrame, frameNumToRead=0):
 
+    ### define stream object ###
     streamObj = vidObjDict['streamObj']
 
+    ### make sure video is a raw video file ###
     if vidObjDict['type'] == 'raw':
-        # With raw mp4, we can go directly to the next fixation frame instead of stepping through each frame ...
-        frame = None  # initialize to default return value
+
+        ### With raw mp4, we can go directly to the next fixation frame instead of stepping through each frame ...###
+        ### initialize to default return value ###
+        frame = None
 
         if frameNumToRead is not None:  # if a frame# is given, seek to it
             # To seek to a specific frame number:
@@ -159,11 +178,10 @@ def grab_video_frame(avObj, streamObj, vidObjDict, ticksPerFrame, frameNumToRead
 
             if frameNum == frameNumToRead:  # Got it; return
                 break
-    else:  # using converted video files with buffer
-        # Grab the next frame (from buffer, or file if needed)
+    ### using converted video files with buffer ###
+    else:
+        ### Grab the next frame (from buffer, or file if needed) ###
         (grabbed, frame) = vidObjDict['vidObj'].read()
-
-    time2 = time.time()
 
     vidObjDict['currentFrame'] = frameNumToRead
 
@@ -175,10 +193,7 @@ def grab_video_frame(avObj, streamObj, vidObjDict, ticksPerFrame, frameNumToRead
 
 def feature_detect(frame, ref_img, method=DETECTOR, matcher=MATCHER):
 
-###various feature detection methods...
-
-#######choose which one when calling function; by default, method is SIFT######
-
+### choose which one when calling function; by default, method is SIFT ###
     if method == "SIFT":
         det = cv2.xfeatures2d.SIFT_create()
 
@@ -188,10 +203,9 @@ def feature_detect(frame, ref_img, method=DETECTOR, matcher=MATCHER):
     elif method == "ORB":
         det = cv2.ORB_create()
 
-
+    ### get keypoints and descriptors ###
     kp1, des1 = det.detectAndCompute(frame, None)
     kp2, des2 = det.detectAndCompute(ref_img, None)
-
 
     ### SIFT and SURF incorporate same method for feature detection ###
     if matcher == "FLANN":
@@ -205,13 +219,12 @@ def feature_detect(frame, ref_img, method=DETECTOR, matcher=MATCHER):
 
         matches = flann.knnMatch(des1, des2, k=2)
 
-        ## get good matches
-        ## store all the good matches as per Lowe's ratio test.
+        ### get good matches ###
+        ### store all the good matches as per Lowe's ratio test. ###
         good = []
         for m,n in matches:
             if m.distance < 0.7*n.distance:
                 good.append(m)
-        #good = matches[:10]
 
         ### Get src and dst points
         if len(good) > 10:
@@ -229,7 +242,6 @@ def feature_detect(frame, ref_img, method=DETECTOR, matcher=MATCHER):
         ### get src and dst points
         src_pts = np.float32([kp1[m.queryIdx].pt for m in matches]).reshape(-1,1,2)
         dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1,1,2)
-
 
     ### create homography matrix ###
     M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
@@ -329,113 +341,136 @@ def perspectiveTransform(file, ref_img, kp1, kp2, good, matches, matchesMask, ma
 ##############################################################################################################
 ################### this function is used to stick two images next to each other horizontally ################
 
-def hstack(imgL, imgR, border=0):
+def hstack(img_left, img_right, border=0):
     # horizontally concatenate two images. If different depths, make both color
 
-    def add_border(imgL, borderImg):
-        # horizontally concatenate one image with a border.
+    ### separate function to horizontally concatenate images together ###
+    def add_border(img_left, borderImg):
 
-        shapeL, shapeBorder = imgL.shape, borderImg.shape
-        if len(shapeL) != len(shapeBorder):  # Images are different bit depths
-            if len(shapeL) == 2:  # imgT is grayscale; convert it to BGR
-                imgT = cv2.cvtColor(imgL, cv2.COLOR_GRAY2BGR)
+        ### define shape ###
+        shapeL, shapeBorder = img_left.shape, borderImg.shape
+
+        ### make sure images have same bit depths ###
+        if len(shapeL) != len(shapeBorder):
+            ### if images grayscale, convert to BGR ###
+            if len(shapeL) == 2:
+                img_left = cv2.cvtColor(img_left, cv2.COLOR_GRAY2BGR)
             if len(shapeBorder) == 2:  # shapeBorder is grayscale; convert it to BGR
                 borderImg = cv2.cvtColor(borderImg, cv2.COLOR_GRAY2BGR)
 
-        hL, wL = imgL.shape[:2]
+        ### height and width of both images ###
+        hL, wL = img_left.shape[:2]
         hBorder, wBorder = borderImg.shape[:2]
 
-        if imgL.shape[2] == 3:  # color image
-            # create empty matrix
+        ### color image ###
+        if img_left.shape[2] == 3:
+
+            ### create empty matrix ###
+            ### image with border ###
             imgWborder = np.zeros((max(hL, hBorder), (wL + wBorder), 3), np.uint8)
-                      #  np.zeros((max(hL, hR),       wL + wR, 3), np.uint8)
 
-            # combine 2 images
-            imgWborder[0:hL, 0:wL, 0:3] = imgL
+            ### combine 2 images ###
+            ### create new window based on height and width of both images ###
+            imgWborder[0:hL, 0:wL, 0:3] = img_left
             imgWborder[0:hBorder, wL:wL+wBorder, 0:3] = borderImg
-            # stackImg[0:hL, 0:wL, 0:3] = imgL
-            # stackImg[0:hR,      wL:wL + wR, 0:3] = imgR
 
-        else:  # monochrome image
-            # create empty matrix
-            # stackImg = np.zeros((max(hT, hB), wT + wB, 2), np.uint8)
+        ### if monochrome image ###
+        else:
+            ### create empty matrix ###
+            ### image with border ###
             imgWborder = np.zeros(((hL + hBorder), max(wL, wBorder)), np.uint8)
 
-            # combine 2 images
-            imgWborder[0:hL, 0:wL] = imgL
+            ### combine 2 images ###
+            ### don't include depth of images ###
+            imgWborder[0:hL, 0:wL] = img_left
             imgWborder[0:hBorder, wL:wL+wBorder] = borderImg
 
+        ### return image with border ###
         return imgWborder
 
-    shapeL, shapeR = imgL.shape, imgR.shape
-    hL, wL = imgL.shape[:2]
-    hR, wR = imgR.shape[:2]
+    ### define shape, height, and width of left anf right images ###
+    shapeL, shapeR = img_left.shape, img_right.shape
+    hL, wL = img_left.shape[:2]
+    hR, wR = img_right.shape[:2]
 
-    if border > 0:  # Add a border to the bottom of imgT the same width as imgT and border pixels high
-        borderImg = np.zeros((hL, border), np.uint8)  # make it grayscale; it will be converted if nec.
-        imgL = add_border(imgL, borderImg)  # add the border to the bottom of imgT, then continue ...
+    ### Add a border to the bottom of img_top the same width as img_top and border pixels high ###
+    if border > 0:
 
-    # Recalculate now that border is added
-    shapeL, shapeR = imgL.shape, imgR.shape
-    hL, wL = imgL.shape[:2]
-    hR, wR = imgR.shape[:2]
+        ### make it grayscale; it will be converted if necessary ###
+        borderImg = np.zeros((hL, border), np.uint8)
 
-    if len(shapeL) != len(shapeR):  # Images are different bit depths
-        if len(shapeL) == 2:  # imgL is grayscale; convert it to BGR
-            imgL = cv2.cvtColor(imgL, cv2.COLOR_GRAY2BGR)
-        if len(shapeR) == 2:  # imgR is grayscale; convert it to BGR
-            imgR = cv2.cvtColor(imgR, cv2.COLOR_GRAY2BGR)
+        ### add the border to the bottom of img_top, then continue ... ###
+        img_left = add_border(img_left, borderImg)
 
-    hL, wL = imgL.shape[:2]
-    hR, wR = imgR.shape[:2]
+    ### Recalculate shape, height, and width now that border is added ###
+    shapeL, shapeR = img_left.shape, img_right.shape
+    hL, wL = img_left.shape[:2]
+    hR, wR = img_right.shape[:2]
 
+    ### again with the various bit depths ###
+    ### img_left is grayscale; convert it to BGR ###
+    ### img_right is grayscale; convert it to BGR ###
+    if len(shapeL) != len(shapeR):
+        if len(shapeL) == 2:
+            img_left = cv2.cvtColor(img_left, cv2.COLOR_GRAY2BGR)
+        if len(shapeR) == 2:
+            img_right = cv2.cvtColor(img_right, cv2.COLOR_GRAY2BGR)
 
-    if len(imgL.shape) == 3:  # color image
-        # create empty matrix
+    ### height and width of left and right images ###
+    hL, wL = img_left.shape[:2]
+    hR, wR = img_right.shape[:2]
+
+    ### create final stack image ###
+    ### if color image: ###
+    if len(img_left.shape) == 3:
+        ### create empty matrix size of that max height and width of both images + border ###
         stackImg = np.zeros((max(hL, hR), wL + wR, 3), np.uint8)
 
-        # combine 2 images
-        stackImg[:hL, :wL, :3] = imgL
-        stackImg[:hR, wL:wL + wR, :3] = imgR
+        ### combine 2 images ###
+        ### take left side as left image, from that end to end of window as right image ###
+        stackImg[:hL, :wL, :3] = img_left
+        stackImg[:hR, wL:wL + wR, :3] = img_right
 
-    else: # monochrome image
-        # create empty matrix
+    ### repeat for monochrome image ###
+    else:
+        ### create empty matrix ###
         stackImg = np.zeros((max(hL, hR), wL + wR), np.uint8)
 
-        # combine 2 images
-        stackImg[:hL, :wL] = imgL
-        stackImg[:hL, wL:wL + wR] = imgR
+        ### combine 2 images ###
+        stackImg[:hL, :wL] = img_left
+        stackImg[:hL, wL:wL + wR] = img_right
 
+    ### return stack image ###
     return stackImg
 
 ##############################################################################################################
 ##############################################################################################################
 ################# this function is used to stick two images/windows next to each other verically #############
 
-def vstack_images(imgT, imgB, border=0):
+def vstack_images(img_top, img_bottom, border=0):
     # vertically concatenate two images. If different depths, make both color
     # optionally, add a border between them
 
-    def add_border(imgT, borderImg):
+    def add_border(img_top, borderImg):
         # vertically concatenate one image with a border.
 
-        shapeT, shapeBorder = imgT.shape, borderImg.shape
+        shapeT, shapeBorder = img_top.shape, borderImg.shape
 
         if len(shapeT) != len(shapeBorder):  # Images are different bit depths
-            if len(shapeT) == 2:  # imgT is grayscale; convert it to BGR
-                imgT = cv2.cvtColor(imgT, cv2.COLOR_GRAY2BGR)
+            if len(shapeT) == 2:  # img_top is grayscale; convert it to BGR
+                img_top = cv2.cvtColor(img_top, cv2.COLOR_GRAY2BGR)
             if len(shapeBorder) == 2:  # shapeBorder is grayscale; convert it to BGR
                 borderImg = cv2.cvtColor(borderImg, cv2.COLOR_GRAY2BGR)
 
-        hT, wT = imgT.shape[:2]
+        hT, wT = img_top.shape[:2]
         hBorder, wBorder = borderImg.shape[:2]
 
-        if imgT.shape[2] == 3:  # color image
+        if img_top.shape[2] == 3:  # color image
             # create empty matrix
             imgWborder = np.zeros(((hT + hBorder), max(wT, wBorder), 3), np.uint8)
 
             # combine 2 images
-            imgWborder[0:hT, 0:wT, 0:3] = imgT
+            imgWborder[0:hT, 0:wT, 0:3] = img_top
             imgWborder[hT:hT + hBorder, 0:wBorder, 0:3] = borderImg
 
         else:  # monochrome image
@@ -444,42 +479,41 @@ def vstack_images(imgT, imgB, border=0):
             imgWborder = np.zeros(((hT + hBorder), max(wT, wBorder), 2), np.uint8)
 
             # combine 2 images
-            imgWborder[0:hT, 0:wT, 0:2] = imgT
+            imgWborder[0:hT, 0:wT, 0:2] = img_top
             imgWborder[hT:hT + hBorder, 0:wBorder, 0:2] = borderImg
 
         return imgWborder
 
     # vertically concatenate two images. If different depths, make both color
     # optionally, add a border.
+    shapeT, shapeB = img_top.shape, img_bottom.shape
+    hT, wT = img_top.shape[:2]
+    hB, wB = img_bottom.shape[:2]
 
-    shapeT, shapeB = imgT.shape, imgB.shape
-    hT, wT = imgT.shape[:2]
-    hB, wB = imgB.shape[:2]
-
-    if border > 0:  # Add a border to the bottom of imgT the same width as imgT and border pixels high
+    if border > 0:  # Add a border to the bottom of img_top the same width as img_top and border pixels high
         borderImg = np.zeros((border, wT), np.uint8)  # make it grayscale; it will be converted if nec.
 
-        imgT = add_border(imgT, borderImg)  # add the border to the bottom of imgT, then continue ...
+        img_top = add_border(img_top, borderImg)  # add the border to the bottom of img_top, then continue ...
 
     # Recalculate now that border is added
-    shapeT, shapeB = imgT.shape, imgB.shape
-    hT, wT = imgT.shape[:2]
-    hB, wB = imgB.shape[:2]
+    shapeT, shapeB = img_top.shape, img_bottom.shape
+    hT, wT = img_top.shape[:2]
+    hB, wB = img_bottom.shape[:2]
 
     if len(shapeT) != len(shapeB):  # Images are different bit depths
-        if len(shapeT) == 2:  # imgT is grayscale; convert it to BGR
-            imgT = cv2.cvtColor(imgT, cv2.COLOR_GRAY2BGR)
-        if len(shapeB) == 2:  # imgB is grayscale; convert it to BGR
-            imgB = cv2.cvtColor(imgB, cv2.COLOR_GRAY2BGR)
+        if len(shapeT) == 2:  # img_top is grayscale; convert it to BGR
+            img_top = cv2.cvtColor(img_top, cv2.COLOR_GRAY2BGR)
+        if len(shapeB) == 2:  # img_bottom is grayscale; convert it to BGR
+            img_bottom = cv2.cvtColor(img_bottom, cv2.COLOR_GRAY2BGR)
 
-    if imgT.shape[2] == 3:  # color image
+    if img_top.shape[2] == 3:  # color image
         # create empty matrix
         # stackImg = np.zeros((max(hT, hB), wT + wB, 3), np.uint8)
         stackImg = np.zeros(((hT + hB), max(wT, wB), 3), np.uint8)
 
         # combine 2 images
-        stackImg[0:hT, 0:wT, 0:3] = imgT
-        stackImg[hT:hT+hB, 0:wB, 0:3] = imgB
+        stackImg[0:hT, 0:wT, 0:3] = img_top
+        stackImg[hT:hT+hB, 0:wB, 0:3] = img_bottom
 
     else: # monochrome image
         # create empty matrix
@@ -487,8 +521,8 @@ def vstack_images(imgT, imgB, border=0):
         stackImg = np.zeros(((hT + hB), max(wT, wB), 2), np.uint8)
 
         # combine 2 images
-        stackImg[0:hT, 0:wT, 0:2] = imgT
-        stackImg[hT:hT+hB, 0:wB, 0:2] = imgB
+        stackImg[0:hT, 0:wT, 0:2] = img_top
+        stackImg[hT:hT+hB, 0:wB, 0:2] = img_bottom
 
     return stackImg
 
