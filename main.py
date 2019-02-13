@@ -121,10 +121,14 @@ videoWH = vidObjDict['width'], vidObjDict['height']
 #### startatFix is in the setup_run function ###
 #### basically move all important stuff from that function into this code ###
 #### only focus on one subject at a time ###
-fixTableIdx = start_fixation - 1  # Index into table is fixation# - 1
 
+### Index into table is fixation# - 1 ##
+fixTableIdx = start_fixation - 1
+
+### define next fixation from fixation table ###
 nextFixationFrame = fixationTable[fixTableIdx, FRAME_]
 
+### label fixation as next fixation to continue moving forward ###
 firstFixationFrame = nextFixationFrame
 
 firstPass = True
@@ -166,14 +170,19 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         ### do the feature detection based on the fixation coordinates ###
         ##################################################################
 
-        src_pts, dst_pts, M, mask, matchesMask = fn.feature_detect(frame, ref_img, method=DETECTOR, matcher=MATCHER)
+        ### Make a mask: 0s everywhere except the window surrounding fixation (1s) ###
+        frameMask = np.zeros(frame.shape, np.uint8)
+        frameMask[fixWinUL[0]:fixWinUL[0] + fixBoxHW[H_], fixWinUL[1]:fixWinUL[1] + fixBoxHW[W_]] = 1
+        frameMask = cv2.cvtColor(frameMask, cv2.COLOR_BGR2GRAY)
+
+        distance_points, Matrix, mask = fn.feature_detect(frame, frameMask, ref_img, method=DETECTOR, matcher=MATCHER)
 
         ### edit this as well to match parameters and outputs ###
-        index_x, index_y, obj_height, obj_width = fn.object_detect(ref_img, dst_pts, segW, segH, nRowsRefImg, nColsRefImg, mask)
+        index_x, index_y, obj_height, obj_width = fn.object_detect(ref_img, distance_points, segW, segH, nRowsRefImg, nColsRefImg, mask)
 
         ### if you want to display the matches between both images ####
         if PERSPECTIVE_TRANSFORM == True:
-            detected_image = fn.perspectiveTransform(currentFrame, ref_img, mask, M)
+            detected_image = fn.perspectiveTransform(currentFrame, ref_img, mask, Matrix)
 
             cv2.namedWindow('Matches')
             cv2.imshow('Matches', detected_image)
@@ -191,7 +200,7 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         displayImg_name = ('displayImg_{}-'.format(currentFrame))
 
         ### display each resulting window ###
-        displayImg = fn.display_image(ref_img, frame, index_x, index_y, obj_height, obj_width)
+        displayImg = fn.display_image(ref_img, fixRegionImg, fixPosXY, index_x, index_y, obj_height, obj_width)
         # cv2.imshow(displayImg_name, displayImg)
 
         ### write out the image into the new directory ###
@@ -203,7 +212,7 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         # If the next fixation is in the list of exclusions, skip through them
         while fixTableIdx in exclude_fixations:
             print("fixTableIdx {} is in the list of excluded fixations; skipping it ...".format(fixTableIdx))
-            fixTableIdx = fixTableIdx + 1   # prepare for next fixation in table
+            fixTableIdx = fixTableIdx + 1    # prepare for next fixation in table
 
         # Check for end of trial
         if fixTableIdx < min(end_fixation, (nFixations - 1)):

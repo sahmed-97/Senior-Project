@@ -8,9 +8,9 @@ import av
 from ID_assisted_defs import ID_, CTR_FRAME_, START_FRAME_, DUR_, X_, Y_  # Indices into fixationTable
 from ID_assisted_defs import H_, W_  # fixBoxHW[]
 
-DETECTOR = 'SIFT'
+DETECTOR = "SIFT"
 
-MATCHER = 'FLANN'
+MATCHER = "FLANN"
 
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
@@ -191,9 +191,11 @@ def grab_video_frame(avObj, streamObj, vidObjDict, ticksPerFrame, frameNumToRead
 ##############################################################################################################
 ####################################### initial feature detection ############################################
 
-def feature_detect(frame, ref_img, method=DETECTOR, matcher=MATCHER):
+def feature_detect(frame, frameMask, ref_img, method=DETECTOR, matcher=MATCHER):
 
-### choose which one when calling function; by default, method is SIFT ###
+    global src_pts, dst_pts, det
+    ### choose which one when calling function; by default, method is SIFT ###
+
     if method == "SIFT":
         det = cv2.xfeatures2d.SIFT_create()
 
@@ -204,7 +206,7 @@ def feature_detect(frame, ref_img, method=DETECTOR, matcher=MATCHER):
         det = cv2.ORB_create()
 
     ### get keypoints and descriptors ###
-    kp1, des1 = det.detectAndCompute(frame, None)
+    kp1, des1 = det.detectAndCompute(frame, frameMask)
     kp2, des2 = det.detectAndCompute(ref_img, None)
 
     ### SIFT and SURF incorporate same method for feature detection ###
@@ -231,6 +233,8 @@ def feature_detect(frame, ref_img, method=DETECTOR, matcher=MATCHER):
             src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1,1,2)
             dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1,1,2)
 
+            M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+
     ### ORB will incorporate different detection method ###
     elif matcher == "BF":
 
@@ -243,11 +247,13 @@ def feature_detect(frame, ref_img, method=DETECTOR, matcher=MATCHER):
         src_pts = np.float32([kp1[m.queryIdx].pt for m in matches]).reshape(-1,1,2)
         dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1,1,2)
 
-    ### create homography matrix ###
-    M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-    matchesMask = mask.ravel().tolist()
+        M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
 
-    return src_pts, dst_pts, M, mask, matchesMask
+    ### create homography matrix ###
+    #M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+    #matchesMask = mask.ravel().tolist()
+
+    return src_pts, dst_pts, M, mask
 
 ##############################################################################################################
 ##############################################################################################################
@@ -530,10 +536,14 @@ def vstack_images(img_top, img_bottom, border=0):
 ######################################################################################################
 ######################################################################################################
 
-def display_image(ref_img,test_img, index_x, index_y, obj_height, obj_width):
+def display_image(ref_img,test_img, fixPosXY, index_x, index_y, obj_height, obj_width):
+
+    ### define x and y coordinates of the fixation ###
+    fix_x = fixPosXY[0]
+    fix_y = fixPosXY[1]
 
     ### draw circle around the initial index coordinate (optional) ###
-    result = cv2.circle(ref_img, (index_x, index_y), 12, WHITE, 3)
+    result = cv2.circle(test_img, (fix_x, fix_y), 12, WHITE, 3)
 
     ### create rectangle starting at index point and making second point be index + obj height/width ###
     result = cv2.rectangle(ref_img, (index_x, index_y), (index_x + obj_width, index_y+obj_height), GREEN, 6)
