@@ -193,7 +193,8 @@ def grab_video_frame(avObj, streamObj, vidObjDict, ticksPerFrame, frameNumToRead
 
 def feature_detect(frame, frameMask, ref_img, method=DETECTOR, matcher=MATCHER):
 
-    global src_pts, dst_pts, det
+    #src_pts = 0
+    #dst_pts = 0
     ### choose which one when calling function; by default, method is SIFT ###
 
     if method == "SIFT":
@@ -233,7 +234,6 @@ def feature_detect(frame, frameMask, ref_img, method=DETECTOR, matcher=MATCHER):
             src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1,1,2)
             dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1,1,2)
 
-            M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
 
     ### ORB will incorporate different detection method ###
     elif matcher == "BF":
@@ -247,13 +247,12 @@ def feature_detect(frame, frameMask, ref_img, method=DETECTOR, matcher=MATCHER):
         src_pts = np.float32([kp1[m.queryIdx].pt for m in matches]).reshape(-1,1,2)
         dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1,1,2)
 
-        M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
 
     ### create homography matrix ###
-    #M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+    M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
     #matchesMask = mask.ravel().tolist()
 
-    return src_pts, dst_pts, M, mask
+    return dst_pts, M, mask
 
 ##############################################################################################################
 ##############################################################################################################
@@ -536,20 +535,22 @@ def vstack_images(img_top, img_bottom, border=0):
 ######################################################################################################
 ######################################################################################################
 
-def display_image(ref_img,test_img, fixPosXY, index_x, index_y, obj_height, obj_width):
+def display_image(ref_img, test_img,fixRegionImg, fixPosXY, index_x, index_y, obj_height, obj_width):
 
     ### define x and y coordinates of the fixation ###
     fix_x = fixPosXY[0]
     fix_y = fixPosXY[1]
 
     ### draw circle around the initial index coordinate (optional) ###
-    result = cv2.circle(test_img, (fix_x, fix_y), 12, WHITE, 3)
+    result = cv2.circle(test_img, (fix_x, fix_y), 15, YELLOW, 3)
 
     ### create rectangle starting at index point and making second point be index + obj height/width ###
     result = cv2.rectangle(ref_img, (index_x, index_y), (index_x + obj_width, index_y+obj_height), GREEN, 6)
 
+    left_img = vstack_images(test_img, fixRegionImg, border=2)
+
     ### hstack final image with the frame ###
-    displayImg = hstack(test_img, result, border=2)
+    displayImg = hstack(left_img, result, border=2)
 
     ### create a display image name for each frame/image ###
     displayImg_name = ('displayImg_{}-'.format(test_img))

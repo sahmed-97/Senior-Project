@@ -18,7 +18,7 @@ refImgFname = basePath + 'RefImg_Series_205x490.jpg'
 subjNum = 35
 
 ### read in the reference image ###
-ref_img = cv2.imread(refImgFname)  # ref image
+ref_Img = cv2.imread(refImgFname)  # ref image
 
 ### define width and height of the fixation box ###
 fixBoxHW = (199,199)
@@ -82,7 +82,7 @@ VIDEO_HEIGHT = 720  # default
 
 
 segmentedReferenceImage, segW, segH, nRowsRefImg, nColsRefImg = \
-    fn.determine_segments_from_fname_and_image(refImgFname, ref_img)
+    fn.determine_segments_from_fname_and_image(refImgFname, ref_Img)
 
 ##############################################
 #####comment all of these lines as well ######
@@ -128,27 +128,26 @@ fixTableIdx = start_fixation - 1
 ### define next fixation from fixation table ###
 nextFixationFrame = fixationTable[fixTableIdx, FRAME_]
 
-### label fixation as next fixation to continue moving forward ###
-firstFixationFrame = nextFixationFrame
-
 firstPass = True
 
 ### time how long it all takes ###
 startTime = time.time()
 
-### define the current file and total number of files in the subj path ###
-#currentFile = 1
-#totalFiles = len(os.listdir(subjPath))
-
-currentFrame = firstFixationFrame
-img_index = 0
+### index the current frame to iterate through the frames in table ###
+currentFrame = 0
 
 while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
 
+    ### make a copy of the reference image ###
+    ref_img = ref_Img.copy()
+
+    ###define current frame as it iterates through the table ###
+    currentFrame = nextFixationFrame
+    # firstFixationFrame = nextFixationFrame
 # while currentFile < totalFiles:
 
-    if currentFrame < firstFixationFrame:
-        fn.skip_forward_to_first_desired_frame(vidObjDict['vidObj'], firstFixationFrame, currentFrame)
+    # if currentFrame < firstFixationFrame:
+    # fn.skip_forward_to_first_desired_frame(vidObjDict['vidObj'], firstFixationFrame, currentFrame)
     # grab the current frame
     frame, vidObjDict = fn.grab_video_frame(avObj, streamObj, vidObjDict, ticksPerFrame, frameNumToRead=nextFixationFrame)
 
@@ -200,14 +199,14 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         displayImg_name = ('displayImg_{}-'.format(currentFrame))
 
         ### display each resulting window ###
-        displayImg = fn.display_image(ref_img, fixRegionImg, fixPosXY, index_x, index_y, obj_height, obj_width)
+        displayImg = fn.display_image(ref_img, frame, fixRegionImg, fixPosXY, index_x, index_y, obj_height, obj_width)
         # cv2.imshow(displayImg_name, displayImg)
 
         ### write out the image into the new directory ###
         ### to change directory, go to 'assistedCodeDir' line at the top and change to desired directory name ###
         fname = '{}/{}.png'.format(CodeDir, displayImg_name)
         cv2.imwrite(fname, displayImg)
-        img_index += 1
+        # img_index += 1
 
         # If the next fixation is in the list of exclusions, skip through them
         while fixTableIdx in exclude_fixations:
@@ -236,9 +235,13 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
             else:
                 break
 
-    currentFrame = currentFrame + 1
+    fixTableIdx = fixTableIdx + 1
+
+    # nextFixationFrame = fixationTable[fixTableIdx, FRAME_]
 
 cv2.destroyAllWindows()
+
+
 ### print out total time it took ###
 elapsedTime = time.time() - startTime
 print('Subject {} process is complete. Elapsed time is {} for {} frames'.format(subjNum, elapsedTime, currentFrame))
