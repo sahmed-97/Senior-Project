@@ -33,10 +33,8 @@ def feature_detect(test_img, ref_img, method=DETECTOR, matcher=MATCHER):
     elif method == "ORB":
         det = cv2.ORB_create()
 
-
     kp1, des1 = det.detectAndCompute(test_img, None)
     kp2, des2 = det.detectAndCompute(ref_img, None)
-
 
     ### SIFT and SURF incorporate same method for feature detection ###
     if matcher == "FLANN":
