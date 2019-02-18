@@ -43,7 +43,6 @@ dateStr = time.strftime("%Y-%b-%d")
 assistedCodeDir = ('Code_Results_{}-{}'.format(timeStr, trialNum))
 os.makedirs(assistedCodeDir)
 
-
 #trialPath = subjPath + trial
 
 ### filename stuff for when I move onto the videos ####
