@@ -229,10 +229,17 @@ def feature_detect(frame, frameMask, ref_img, method=DETECTOR, matcher=MATCHER):
             if m.distance < 0.7*n.distance:
                 good.append(m)
 
-        ### Get src and dst points
-        if len(good) > 10:
+        ### Get src and dst points ###
+        ### use try/except because for some frames, not enough kpts will be detected ###
+        ### will get UnboundLocalError, so use try/except to move around that ###
+        if len(good) > 0:
             src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1,1,2)
             dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1,1,2)
+        else:
+            print("Not enough matches to get source and distance points...")
+            # src_pts = ([0,0])
+            # dst_pts = ([0,0])
+            frame += 1
 
 
     ### ORB will incorporate different detection method ###
@@ -249,7 +256,13 @@ def feature_detect(frame, frameMask, ref_img, method=DETECTOR, matcher=MATCHER):
 
 
     ### create homography matrix ###
+    # try:
     M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+    # except Exception as errMsg:
+    #     print("cannot get src and dst pts for frame {} to form homography ... {}".format(frameNum, errMsg))
+    #     continue
+        # M, mask = None
+        # frame += 1
     #matchesMask = mask.ravel().tolist()
 
     return dst_pts, M, mask
@@ -257,7 +270,6 @@ def feature_detect(frame, frameMask, ref_img, method=DETECTOR, matcher=MATCHER):
 ##############################################################################################################
 ##############################################################################################################
 ############# this function will be the MAIN one to complete the object detection in the frames ##############
-### EDIT THIS ONE TO WORK FOR THE FIXATION TABLE AND ALL THAT SHIT ###
 
 def object_detect(ref_img, dst_pts, segW, segH, nRowsImg, nColsImg, mask):
 
@@ -535,7 +547,8 @@ def vstack_images(img_top, img_bottom, border=0):
 ######################################################################################################
 ######################################################################################################
 
-def display_image(ref_img, test_img,fixRegionImg, fixPosXY, index_x, index_y, obj_height, obj_width):
+def display_image(ref_img, test_img,fixRegionImg, fixPosXY, index_x, index_y, obj_height, obj_width, currentFrame,
+                                fixTableIdx):
 
     ### define x and y coordinates of the fixation ###
     fix_x = fixPosXY[0]
@@ -551,6 +564,15 @@ def display_image(ref_img, test_img,fixRegionImg, fixPosXY, index_x, index_y, ob
 
     ### hstack final image with the frame ###
     displayImg = hstack(left_img, result, border=2)
+
+    ### Text to add to image window ###
+    frame_text = "Current frame: {}".format(currentFrame)
+    fix_text = "Current Fixation: {}".format(fixTableIdx)
+    fix_pos_text = "Fixation Position: ({},{})".format(fixPosXY[0], fixPosXY[1])
+
+    cv2.putText(displayImg, frame_text, (150, 1000), FONT, 2, WHITE, 2, cv2.LINE_AA)
+    cv2.putText(displayImg, fix_text, (4, 1050), FONT, 1.5, GREEN, 1, cv2.LINE_AA)
+    cv2.putText(displayImg, fix_pos_text, (550, 1050), FONT, 1.5, CYAN, 1, cv2.LINE_AA)
 
     ### create a display image name for each frame/image ###
     displayImg_name = ('displayImg_{}-'.format(test_img))

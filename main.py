@@ -14,7 +14,7 @@ basePath = '/Users/sheelaahmed/Desktop/NAS/'
 
 refImgFname = basePath + 'RefImg_Series_205x490.jpg'
 
-### define subject number ###
+### DEFINE SUBJECT NUMBER ###
 subjNum = 35
 
 ### read in the reference image ###
@@ -39,15 +39,15 @@ subj = 'NAS_1_S{}/'.format(subjNum)
 subjPath = basePath + subj
 trialPath = subjPath + trial
 
-start_fixation = 369  # 330  # S28: Frames 6160 - 26350 = Fixations 300 - 3451
-end_fixation = 3323  # to code all
+start_fixation = 3850  # 330  # S28: Frames 6160 - 26350 = Fixations 300 - 3451
+end_fixation = 5215  # to code all
 
+### list of fixations to exclude(calibration etc) ###
 exclude_fixations = []  # default if no fixations are excluded
-exclude_fixations = list(np.r_[648:805, 1003:1711, 2290:2645])  # Don't code any fixations in these ranges
-
+EXCLUDE_FIXATIONS = list(np.r_[2910:3915, 3920:4115, 4120:4315, 4320:5000, 5338:5652])
 
 ### define video and csv filenames ###
-videoFname = trialPath+'world_out.mp4'  # converted video
+# videoFname = basePath + 'vlc-record-2019-02-18-10h47m24s-world.mp4' ### new cropped video file for testing! ###
 rawVideoFname = 'world.mp4'  # raw mp4 video.
 fixationCSVfName = trialPath+'fixations.csv'  # sample csv file with Frame, X, Y of fixations
 
@@ -63,7 +63,7 @@ CYAN = (255, 255, 0)
 
 NFRAMES = 10000000  # 9999
 
-FONT = cv2.FONT_HERSHEY_COMPLEX_SMALL
+FONT = cv2.FONT_HERSHEY_SIMPLEX
 
 #######################################################################
 ### set the DETECTOR and MATCHER to whatever is desired for testing ###
@@ -165,19 +165,28 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
 
         fixRegionImg = frame[fixWinUL[0]:fixWinUL[0] + fixBoxHW[H_], fixWinUL[1]:fixWinUL[1] + fixBoxHW[W_]].copy()
 
-        ##################################################################
-        ### do the feature detection based on the fixation coordinates ###
-        ##################################################################
-
         ### Make a mask: 0s everywhere except the window surrounding fixation (1s) ###
         frameMask = np.zeros(frame.shape, np.uint8)
         frameMask[fixWinUL[0]:fixWinUL[0] + fixBoxHW[H_], fixWinUL[1]:fixWinUL[1] + fixBoxHW[W_]] = 1
         frameMask = cv2.cvtColor(frameMask, cv2.COLOR_BGR2GRAY)
 
-        distance_points, Matrix, mask = fn.feature_detect(frame, frameMask, ref_img, method=DETECTOR, matcher=MATCHER)
+        ##################################################################
+        ### do feature detection based on the fixation coordinates.    ###
+        ### need to use try/except in order to work around any error.  ###
+        ##################################################################
+        try:
+            distance_points, Matrix, mask = fn.feature_detect(frame, frameMask, ref_img, method=DETECTOR, matcher=MATCHER)
+        except Exception as errMsg:
+            print("cannot get src and dst pts for frame {} to form homography ... {}".format(currentFrame, errMsg))
+            currentFrame += 1
 
-        ### edit this as well to match parameters and outputs ###
-        index_x, index_y, obj_height, obj_width = fn.object_detect(ref_img, distance_points, segW, segH, nRowsRefImg, nColsRefImg, mask)
+        ##################################################################
+        ######## same with object detection --> try/except      ##########
+        try:
+            index_x, index_y, obj_height, obj_width = fn.object_detect(ref_img, distance_points, segW, segH, nRowsRefImg, nColsRefImg, mask)
+        except Exception as errMsg:
+            print("Error has occured for frame {} ... {}".format(currentFrame, errMsg))
+            currentFrame += 1
 
         ### if you want to display the matches between both images ####
         if PERSPECTIVE_TRANSFORM == True:
@@ -188,25 +197,18 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
             cv2.waitKey()
             cv2.destroyAllWindows()
 
-        ### hstack both images
-        # displayImg = fn.hstack(test_img, detected_image, border=2)
-
-        #####################################
-        ### add text in the new window!!! ###
-        #####################################
 
         ### create a display image name for each frame/image ###
         displayImg_name = ('displayImg_{}-'.format(currentFrame))
 
         ### display each resulting window ###
-        displayImg = fn.display_image(ref_img, frame, fixRegionImg, fixPosXY, index_x, index_y, obj_height, obj_width)
+        displayImg = fn.display_image(ref_img, frame, fixRegionImg, fixPosXY, index_x, index_y, obj_height, obj_width, currentFrame, fixTableIdx)
         # cv2.imshow(displayImg_name, displayImg)
 
         ### write out the image into the new directory ###
         ### to change directory, go to 'assistedCodeDir' line at the top and change to desired directory name ###
         fname = '{}/{}.png'.format(CodeDir, displayImg_name)
         cv2.imwrite(fname, displayImg)
-        # img_index += 1
 
         # If the next fixation is in the list of exclusions, skip through them
         while fixTableIdx in exclude_fixations:
@@ -225,7 +227,6 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         ### This leads to loops where we just keep seeking higher frames, since we are already past the frame we wanted. ###
         ### So check for the special case where currentFrame > nextFixation frame ###
 
-        ### Error in fixation.csv file - skip this fixation and go to the next one ###
         if currentFrame > nextFixationFrame:
 
             ### prepare for next fixation in table ###
@@ -236,8 +237,6 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
                 break
 
     fixTableIdx = fixTableIdx + 1
-
-    # nextFixationFrame = fixationTable[fixTableIdx, FRAME_]
 
 cv2.destroyAllWindows()
 
