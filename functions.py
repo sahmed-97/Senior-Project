@@ -257,15 +257,10 @@ def feature_detect(frame, frameMask, ref_img, method=DETECTOR, matcher=MATCHER):
 
     ### create homography matrix ###
     # try:
-    M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-    # except Exception as errMsg:
-    #     print("cannot get src and dst pts for frame {} to form homography ... {}".format(frameNum, errMsg))
-    #     continue
-        # M, mask = None
-        # frame += 1
-    #matchesMask = mask.ravel().tolist()
+    H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
 
-    return dst_pts, M, mask
+
+    return dst_pts, H, mask
 
 ##############################################################################################################
 ##############################################################################################################
@@ -548,31 +543,61 @@ def vstack_images(img_top, img_bottom, border=0):
 ######################################################################################################
 
 def display_image(ref_img, test_img,fixRegionImg, fixPosXY, index_x, index_y, obj_height, obj_width, currentFrame,
-                                fixTableIdx):
+                                fixTableIdx, H, mask):
 
     ### define x and y coordinates of the fixation ###
     fix_x = fixPosXY[0]
     fix_y = fixPosXY[1]
 
+    ### concatenate a 1 to the end of the coordinate to be able to multiply by 3x3 Homography Matrix ###
+    fixPosXY = np.concatenate((fixPosXY, 1), axis=None)
+    print('frame fixation = {}'.format(fixPosXY))
+
+    ### use try/except to move past errors when there is no homography matrix for frame ###
+    ### errors in homography matrix can occur when fixation isn't on the object, so not enough kpts for matrix ###
+    try:
+        ### get fixation coordinate on reference image by multiplying by mask from homography ###
+        ref_fix = np.dot(fixPosXY, H.T)
+
+    except Exception as errMsg:
+        ref_fix = np.array([850,850,1])
+        print('No Banknote found for frame {}; fixation positioned outside references at ({})'.format(currentFrame, ref_fix))
+
+    # print(ref_fix)
+    ref_fix = ref_fix/ref_fix[2]
+
+    print('ref fixation = {}'.format(ref_fix))
+    ref_fix_x = int(ref_fix[0])
+    ref_fix_y = int(ref_fix[1])
+    # print(ref_fix_x)
+    # print(ref_fix_y)
+
     ### draw circle around the initial index coordinate (optional) ###
-    result = cv2.circle(test_img, (fix_x, fix_y), 15, YELLOW, 3)
+    result = cv2.circle(test_img, (fix_x, fix_y), 20, YELLOW, 3)
+
 
     ### create rectangle starting at index point and making second point be index + obj height/width ###
     result = cv2.rectangle(ref_img, (index_x, index_y), (index_x + obj_width, index_y+obj_height), GREEN, 6)
 
+    ### draw circle around fixation in reference image region ###
+    result = cv2.circle(ref_img, (ref_fix_x, ref_fix_y), 20, BLUE, 3)
+
+    ### vstack fixRegion with the frame to create left side of image ###
     left_img = vstack_images(test_img, fixRegionImg, border=2)
 
-    ### hstack final image with the frame ###
+    ### hstack final image with the frame/fixRegion combo ###
     displayImg = hstack(left_img, result, border=2)
 
     ### Text to add to image window ###
     frame_text = "Current frame: {}".format(currentFrame)
     fix_text = "Current Fixation: {}".format(fixTableIdx)
     fix_pos_text = "Fixation Position: ({},{})".format(fixPosXY[0], fixPosXY[1])
+    ref_fix_text = "Fixation Position in Reference Frame: ({},{})".format(ref_fix_x, ref_fix_y)
 
-    cv2.putText(displayImg, frame_text, (150, 1000), FONT, 2, WHITE, 2, cv2.LINE_AA)
-    cv2.putText(displayImg, fix_text, (4, 1050), FONT, 1.5, GREEN, 1, cv2.LINE_AA)
-    cv2.putText(displayImg, fix_pos_text, (550, 1050), FONT, 1.5, CYAN, 1, cv2.LINE_AA)
+    cv2.putText(displayImg, frame_text, (150, 1000), FONT, 4, WHITE, 2, cv2.LINE_AA)
+    cv2.putText(displayImg, fix_text, (4, 1150), FONT, 2.5, WHITE, 2, cv2.LINE_AA)
+    cv2.putText(displayImg, fix_pos_text, (1, 1200), FONT, 2.5, WHITE, 2, cv2.LINE_AA)
+    cv2.putText(displayImg, ref_fix_text, (2200, 950), FONT, 1, BLUE, 1, cv2.LINE_AA)
 
     ### create a display image name for each frame/image ###
     displayImg_name = ('displayImg_{}-'.format(test_img))

@@ -202,12 +202,12 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         displayImg_name = ('displayImg_{}-'.format(currentFrame))
 
         ### display each resulting window ###
-        displayImg = fn.display_image(ref_img, frame, fixRegionImg, fixPosXY, index_x, index_y, obj_height, obj_width, currentFrame, fixTableIdx)
+        displayImg = fn.display_image(ref_img, frame, fixRegionImg, fixPosXY, index_x, index_y, obj_height, obj_width, currentFrame, fixTableIdx, Matrix, mask)
         # cv2.imshow(displayImg_name, displayImg)
 
         ### write out the image into the new directory ###
         ### to change directory, go to 'assistedCodeDir' line at the top and change to desired directory name ###
-        fname = '{}/{}.png'.format(CodeDir, displayImg_name)
+        fname = '{}/{}.jpg'.format(CodeDir, displayImg_name)
         cv2.imwrite(fname, displayImg)
 
         # If the next fixation is in the list of exclusions, skip through them
