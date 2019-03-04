@@ -201,9 +201,15 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         ### create a display image name for each frame/image ###
         displayImg_name = ('displayImg_{}-'.format(currentFrame))
 
+        ### initialize array for fixations in reference image ###
+        reference_frame_fixations = []
+
         ### display each resulting window ###
-        displayImg = fn.display_image(ref_img, frame, fixRegionImg, fixPosXY, index_x, index_y, obj_height, obj_width, currentFrame, fixTableIdx, Matrix, mask)
+        ref_fix, displayImg = fn.object_display_image(ref_img, frame, fixRegionImg, fixPosXY, index_x, index_y, obj_height, obj_width, currentFrame, fixTableIdx, Matrix, mask)
         # cv2.imshow(displayImg_name, displayImg)
+
+        ### append coordinate point to the list of reference coordinates ###
+        reference_frame_fixations.append([ref_fix[0], ref_fix[1]])
 
         ### write out the image into the new directory ###
         ### to change directory, go to 'assistedCodeDir' line at the top and change to desired directory name ###
@@ -237,6 +243,13 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
                 break
 
     fixTableIdx = fixTableIdx + 1
+
+figure, axis = plt.subplots(figsize = (15,15), dpi = 80, facecolor = 'w', edgecolor = 'k')
+axis.imshow(ref_img)
+plt.xlim([0, np.shape(ref_img)[1]])
+plt.ylim([np.shape(ref_img)[0], 0])
+plt.scatter(x = int(reference_frame_fixations[0]), y = int(reference_frame_fixations[1]))
+
 
 cv2.destroyAllWindows()
 

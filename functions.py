@@ -4,6 +4,7 @@ import re
 import time
 import sys
 import av
+import matplotlib.pyplot as plt
 
 from ID_assisted_defs import ID_, CTR_FRAME_, START_FRAME_, DUR_, X_, Y_  # Indices into fixationTable
 from ID_assisted_defs import H_, W_  # fixBoxHW[]
@@ -542,7 +543,7 @@ def vstack_images(img_top, img_bottom, border=0):
 ######################################################################################################
 ######################################################################################################
 
-def display_image(ref_img, test_img,fixRegionImg, fixPosXY, index_x, index_y, obj_height, obj_width, currentFrame,
+def object_display_image(ref_img, test_img,fixRegionImg, fixPosXY, index_x, index_y, obj_height, obj_width, currentFrame,
                                 fixTableIdx, H, mask):
 
     ### define x and y coordinates of the fixation ###
@@ -551,7 +552,7 @@ def display_image(ref_img, test_img,fixRegionImg, fixPosXY, index_x, index_y, ob
 
     ### concatenate a 1 to the end of the coordinate to be able to multiply by 3x3 Homography Matrix ###
     fixPosXY = np.concatenate((fixPosXY, 1), axis=None)
-    print('frame fixation = {}'.format(fixPosXY))
+    # print('frame fixation = {}'.format(fixPosXY))
 
     ### use try/except to move past errors when there is no homography matrix for frame ###
     ### errors in homography matrix can occur when fixation isn't on the object, so not enough kpts for matrix ###
@@ -560,21 +561,17 @@ def display_image(ref_img, test_img,fixRegionImg, fixPosXY, index_x, index_y, ob
         ref_fix = np.dot(fixPosXY, H.T)
 
     except Exception as errMsg:
-        ref_fix = np.array([850,850,1])
+        # ref_fix = np.array([850,850,1])
         print('No Banknote found for frame {}; fixation positioned outside references at ({})'.format(currentFrame, ref_fix))
 
-    # print(ref_fix)
     ref_fix = ref_fix/ref_fix[2]
 
-    print('ref fixation = {}'.format(ref_fix))
+    # print('ref fixation = {}'.format(ref_fix))
     ref_fix_x = int(ref_fix[0])
     ref_fix_y = int(ref_fix[1])
-    # print(ref_fix_x)
-    # print(ref_fix_y)
 
     ### draw circle around the initial index coordinate (optional) ###
     result = cv2.circle(test_img, (fix_x, fix_y), 20, YELLOW, 3)
-
 
     ### create rectangle starting at index point and making second point be index + obj height/width ###
     result = cv2.rectangle(ref_img, (index_x, index_y), (index_x + obj_width, index_y+obj_height), GREEN, 6)
@@ -594,6 +591,7 @@ def display_image(ref_img, test_img,fixRegionImg, fixPosXY, index_x, index_y, ob
     fix_pos_text = "Fixation Position: ({},{})".format(fixPosXY[0], fixPosXY[1])
     ref_fix_text = "Fixation Position in Reference Frame: ({},{})".format(ref_fix_x, ref_fix_y)
 
+    ### display the text over the final display window ###
     cv2.putText(displayImg, frame_text, (150, 1000), FONT, 4, WHITE, 2, cv2.LINE_AA)
     cv2.putText(displayImg, fix_text, (4, 1150), FONT, 2.5, WHITE, 2, cv2.LINE_AA)
     cv2.putText(displayImg, fix_pos_text, (1, 1200), FONT, 2.5, WHITE, 2, cv2.LINE_AA)
@@ -607,23 +605,100 @@ def display_image(ref_img, test_img,fixRegionImg, fixPosXY, index_x, index_y, ob
 
     ### waitKey ###
     k = cv2.waitKey()  # display
-
     if (k & 0xff) == 27 or (k & 0xff) == 113 or (k & 0xff) == 81: #if Esc, q or Q is pushed
         k = 'exit' #exit program
         print('exiting...')
         sys.exit()
-    #cv2.waitKey()
 
-    return displayImg
-
-######################################################################################################
-######################################################################################################
+    return ref_fix, displayImg
 
 ######################################################################################################
 ######################################################################################################
 
 ######################################################################################################
+########### Now begins the process to calculate distance to ROI and visualizging statistics ##########
 ######################################################################################################
+
+# def ROI_display_image(ref_fix, ref_img):
+
+    # figure, axis = plt.subplots(figsize = (15,15), dpi = 80, facecolor = 'w', edgecolor = 'k')
+    # axis.imshow(ref_img)
+    # plt.xlim([0, np.shape(ref_img)[1]])
+    # plt.ylim([np.shape(ref_img)[0], 0])
+    # plt.scatter(x = int(ref_fix[0]), y = int(ref_fix[1]))
+    #
+    # return
+
+# def dist_to_ROI(ref_fix, ROI_image):
+
+######################################################################################################
+######################################################################################################
+
+######### roiImagePath ==>> define at beginning of main.py ###################
+#########  roiDF ==>> define the data frame earlier on in the code ###########
+
+# def findMinDistToROI(ref_fix, roiDf, roiImagePath, numSegsX=4, numSegsY=8):
+#     if fixIn['idx'] % 50 == 0:
+#         logger.info('Finding minimum distance for fix ' + str(fixIn['idx']))
+#
+#     def minDistToAnRoi(fixIn, roiIn, maskedImgIn):
+#
+#         # In:  fixation point, RGB vals of an ROI, roiImage with ROI region defined by pixel RGB vals
+#         # Find minimum distance from a fixation point to a region of interest
+#
+#         x = int(fixIn['fixNormX'] * np.shape(maskedImgIn)[1])
+#         y = int(fixIn['fixNormY'] * np.shape(maskedImgIn)[0])
+#
+#         colorMask = cv2.inRange(maskedImgIn, roiIn['colorVal'], roiIn['colorVal'])
+#
+#         distToPixelInRoi_px = [np.sqrt(np.nansum(np.power([x - mask_yx[1], y - mask_yx[0]], 2)))
+#                                for mask_yx in np.array(np.where(colorMask)).T]
+#
+#         # minDist to ROI of ALL ROI
+#         return np.nanmin(distToPixelInRoi_px)
+#
+#     # Select only those RGB within the same segment as the fixation
+#     roiInSegDf = roiDf[(roiDf['Xseg'] == fixIn['Xseg']) & (roiDf['Yseg'] == fixIn['Yseg'])]
+#
+#     # Check to see if there are ROI in this segment
+#     if (roiInSegDf.empty):
+#         # print('No roi in this fixation''s segment')
+#         return {'nearestROI': np.nan, 'distToNearestROI': np.nan, 'roiDistances': []}
+#     else:
+#         roiImg = cv2.imread(roiImagePath)
+#
+#         if( roiImg is  None):
+#             logger.error('Invalid ROI file.')
+#
+#         # Find pixels in the segment
+#         billHeightPx = np.shape(roiImg)[0] / numSegsX
+#         billWidthPx = np.shape(roiImg)[1] / numSegsY
+#
+#         # np.min([billHeightPx,billWidthPx])
+#         # Mask the segment in the ROI image
+#         lBound = int(billWidthPx * fixIn['Xseg'])
+#         tBound = int(billHeightPx * fixIn['Yseg'])
+#         segMask = np.zeros(roiImg.shape[:2], np.uint8)
+#         segMask[tBound:int(tBound + billHeightPx), lBound:int(lBound + billWidthPx)] = 255
+#         roiSegImg = cv2.bitwise_and(roiImg, roiImg, mask=segMask)
+#         roiSegImg = cv2.cvtColor(roiSegImg, cv2.COLOR_BGR2RGB)
+#
+#
+#
+#         # Fix not in an ROI.  Find nearest.
+#
+#         # Find min fix-to-pixel dist for each ROI
+#         # minDistToROI_roi for this fix will be of len(roiInSegDf)
+#         minDistToROI_roi = roiInSegDf.apply(lambda roi: minDistToAnRoi(fixIn, roi, roiSegImg), axis=1)
+#         # Find min fix-to-roi distance among all distances
+#         minIdx = roiInSegDf['idx'].iloc[np.nanargmin(minDistToROI_roi)]
+#         minVal = np.min(minDistToROI_roi[np.isfinite(minDistToROI_roi)])  # nan min was having issues.
+#
+#     minVal = minVal / np.min([billHeightPx, billWidthPx])
+#
+#     #return {'nearestROI': minIdx, 'distToNearestROI': minVal, 'roiDistances': np.array(minDistToROI_roi.values,dtype=np.float) }
+#     return {'nearestROI': minIdx, 'distToNearestROI': minVal}
+#
 
 ######################################################################################################
 ######################################################################################################
