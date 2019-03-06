@@ -37,8 +37,6 @@ def determine_segments_from_fname_and_image(fname, img):
     if len(segmentWHList) == 2:  # There are two integers; assume that they are segW and segH
         segW = int(segmentWHList[0])
         segH = int(segmentWHList[1])
-        print("Based on filename '{}', assume reference image is made up of {} x {} regions"
-            .format(fname, segW, segH))
         imgIsSegmented = True
 
         # How many rows and columns of items are there in the reference image?
@@ -46,6 +44,8 @@ def determine_segments_from_fname_and_image(fname, img):
 
         nRowsImg = refImgHeight // segH
     nColsImg = refImgWidth // segW
+    print("Based on filename '{}', assume reference image is made up of {} x {} regions"
+          .format(fname, nRowsImg, nColsImg))
 
     return imgIsSegmented, segW, segH, nRowsImg, nColsImg
 
@@ -225,17 +225,17 @@ def feature_detect(frame, frameMask, ref_img, method=DETECTOR, matcher=MATCHER):
 
         ### get good matches ###
         ### store all the good matches as per Lowe's ratio test. ###
-        good = []
+        good_matches = []
         for m,n in matches:
             if m.distance < 0.7*n.distance:
-                good.append(m)
+                good_matches.append(m)
 
         ### Get src and dst points ###
         ### use try/except because for some frames, not enough kpts will be detected ###
         ### will get UnboundLocalError, so use try/except to move around that ###
-        if len(good) > 0:
-            src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1,1,2)
-            dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1,1,2)
+        if len(good_matches) > 0:
+            src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1,1,2)
+            dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1,1,2)
         else:
             print("Not enough matches to get source and distance points...")
             # src_pts = ([0,0])
@@ -261,7 +261,7 @@ def feature_detect(frame, frameMask, ref_img, method=DETECTOR, matcher=MATCHER):
     H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
 
 
-    return dst_pts, H, mask
+    return dst_pts, H, mask, good_matches, kp1, kp2
 
 ##############################################################################################################
 ##############################################################################################################
@@ -544,7 +544,7 @@ def vstack_images(img_top, img_bottom, border=0):
 ######################################################################################################
 
 def object_display_image(ref_img, test_img,fixRegionImg, fixPosXY, index_x, index_y, obj_height, obj_width, currentFrame,
-                                fixTableIdx, H, mask):
+                                fixTableIdx, H, mask, good_matches, kp1, kp2):
 
     ### define x and y coordinates of the fixation ###
     fix_x = fixPosXY[0]
@@ -561,7 +561,7 @@ def object_display_image(ref_img, test_img,fixRegionImg, fixPosXY, index_x, inde
         ref_fix = np.dot(fixPosXY, H.T)
 
     except Exception as errMsg:
-        # ref_fix = np.array([850,850,1])
+        ref_fix = np.array([850,850,1])
         print('No Banknote found for frame {}; fixation positioned outside references at ({})'.format(currentFrame, ref_fix))
 
     ref_fix = ref_fix/ref_fix[2]
@@ -585,35 +585,64 @@ def object_display_image(ref_img, test_img,fixRegionImg, fixPosXY, index_x, inde
     ### hstack final image with the frame/fixRegion combo ###
     displayImg = hstack(left_img, result, border=2)
 
+    # draw_params = dict(matchColor = (255,0,0), singlePointColor = None,
+    #     matchesMask = mask,flags=2)
+    #
+    # displayImg = cv2.drawMatchesKnn(fixRegionImg, kp1, ref_img, kp2, good_matches, None, **draw_params)
+
     ### Text to add to image window ###
     frame_text = "Current frame: {}".format(currentFrame)
     fix_text = "Current Fixation: {}".format(fixTableIdx)
     fix_pos_text = "Fixation Position: ({},{})".format(fixPosXY[0], fixPosXY[1])
     ref_fix_text = "Fixation Position in Reference Frame: ({},{})".format(ref_fix_x, ref_fix_y)
+    matches_text = "Good Matches: {}".format(len(good_matches))
 
     ### display the text over the final display window ###
-    cv2.putText(displayImg, frame_text, (150, 1000), FONT, 4, WHITE, 2, cv2.LINE_AA)
+    cv2.putText(displayImg, frame_text, (4, 1000), FONT, 4, CYAN, 2, cv2.LINE_AA)
     cv2.putText(displayImg, fix_text, (4, 1150), FONT, 2.5, WHITE, 2, cv2.LINE_AA)
     cv2.putText(displayImg, fix_pos_text, (1, 1200), FONT, 2.5, WHITE, 2, cv2.LINE_AA)
-    cv2.putText(displayImg, ref_fix_text, (2200, 950), FONT, 1, BLUE, 1, cv2.LINE_AA)
+    cv2.putText(displayImg, ref_fix_text, (2200, 950), FONT, 1, MAGENTA, 1, cv2.LINE_AA)
+    cv2.putText(displayImg, matches_text, (4, 1250), FONT, 2.5, YELLOW , 1, cv2.LINE_AA)
+
 
     ### create a display image name for each frame/image ###
     displayImg_name = ('displayImg_{}-'.format(test_img))
 
     ### display each resulting window ###
-    cv2.imshow(displayImg_name, displayImg)
+    # cv2.imshow(displayImg_name, displayImg)
 
     ### waitKey ###
-    k = cv2.waitKey()  # display
-    if (k & 0xff) == 27 or (k & 0xff) == 113 or (k & 0xff) == 81: #if Esc, q or Q is pushed
-        k = 'exit' #exit program
-        print('exiting...')
-        sys.exit()
+    # k = cv2.waitKey(1)  # display
+    # if (k & 0xff) == 27 or (k & 0xff) == 113 or (k & 0xff) == 81: #if Esc, q or Q is pushed
+    #     k = 'exit' #exit program
+    #     print('exiting...')
+    #     sys.exit()
 
     return ref_fix, displayImg
 
 ######################################################################################################
 ######################################################################################################
+
+def write_stringlist_to_csv_file(fName, headerTxt, outputStringlist):
+    csvFile = open(fName,'w')
+    csvFile.write(headerTxt + '\n')
+
+    for csvStr in outputStringlist:
+        csvFile.write(csvStr + '\n')
+    csvFile.close()
+
+
+##############################################################################################################
+##############################################################################################################
+
+def append_stringlist_to_csv_file(fName, outputString):
+
+    # Append one line of text to existing csv file and close it.
+    csvFile = open(fName,'a')
+
+    csvFile.write(outputString + '\n')
+
+    csvFile.close()
 
 ######################################################################################################
 ########### Now begins the process to calculate distance to ROI and visualizging statistics ##########
