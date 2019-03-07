@@ -316,7 +316,7 @@ def object_detect(ref_img, dst_pts, segW, segH, nRowsImg, nColsImg, mask):
             index_y = int((index_y) * obj_height)
 
     ### return these four coords to draw a rectangle in display_image function ###
-    return index_x, index_y, obj_height, obj_width
+    return index_x, index_y, obj_height, obj_width, x_avg, y_avg
 
 ############################################################################################################
 ############################################################################################################
@@ -594,14 +594,14 @@ def object_display_image(ref_img, test_img,fixRegionImg, fixPosXY, index_x, inde
     frame_text = "Current frame: {}".format(currentFrame)
     fix_text = "Current Fixation: {}".format(fixTableIdx)
     fix_pos_text = "Fixation Position: ({},{})".format(fixPosXY[0], fixPosXY[1])
-    ref_fix_text = "Fixation Position in Reference Frame: ({},{})".format(ref_fix_x, ref_fix_y)
+    ref_fix_text = "Fix Pos in Ref Frame: ({},{})".format(ref_fix_x, ref_fix_y)
     matches_text = "Good Matches: {}".format(len(good_matches))
 
     ### display the text over the final display window ###
     cv2.putText(displayImg, frame_text, (4, 1000), FONT, 4, CYAN, 2, cv2.LINE_AA)
     cv2.putText(displayImg, fix_text, (4, 1150), FONT, 2.5, WHITE, 2, cv2.LINE_AA)
     cv2.putText(displayImg, fix_pos_text, (1, 1200), FONT, 2.5, WHITE, 2, cv2.LINE_AA)
-    cv2.putText(displayImg, ref_fix_text, (2200, 950), FONT, 1, MAGENTA, 1, cv2.LINE_AA)
+    cv2.putText(displayImg, ref_fix_text, (2100, 950), FONT, 2, MAGENTA, 2, cv2.LINE_AA)
     cv2.putText(displayImg, matches_text, (4, 1250), FONT, 2.5, YELLOW , 1, cv2.LINE_AA)
 
 
@@ -645,20 +645,27 @@ def append_stringlist_to_csv_file(fName, outputString):
     csvFile.close()
 
 ######################################################################################################
-########### Now begins the process to calculate distance to ROI and visualizging statistics ##########
+########### Now begins the process to calculate distance to ROI and visualizing statistics ##########
 ######################################################################################################
 
-# def ROI_display_image(ref_fix, ref_img):
+def get_refImgRegion_labels():
+    refImgRegionLabelDict = {0:'1_2003',     1:'1_2003_Reverse',
+                             2:'5_2003',     3:'5_2003_Reverse',
+                             4:'5_2009',     5:'5_2009_Reverse',
+                             6:'ctr_check',  7:'calibration',
+                             8:'10_2003',    9:'10_2003_Reverse',
+                             10:'10_2009',  11:'10_2009_Reverse',
+                             12:'blank',    13:'blank', 14:'blank', 15:'experimenter',
+                             16:'20_2001',  17:'20_2001_Reverse',
+                             18:'20_2009',  19:'20_2009_Reverse',
+                             20:'blank',    21:'blank', 22:'blank', 23:'blank',
+                             24:'50_2001',  25:'50_2001_Reverse',
+                             26:'50_2006',  27:'50_2006_Reverse',
+                             28:'100_2006', 29:'100_2006_Reverse',
+                             30:'100_2009', 31:'100_2009_Reverse',
+                             -9:'null'}
 
-    # figure, axis = plt.subplots(figsize = (15,15), dpi = 80, facecolor = 'w', edgecolor = 'k')
-    # axis.imshow(ref_img)
-    # plt.xlim([0, np.shape(ref_img)[1]])
-    # plt.ylim([np.shape(ref_img)[0], 0])
-    # plt.scatter(x = int(ref_fix[0]), y = int(ref_fix[1]))
-    #
-    # return
-
-# def dist_to_ROI(ref_fix, ROI_image):
+    return refImgRegionLabelDict
 
 ######################################################################################################
 ######################################################################################################
@@ -666,15 +673,21 @@ def append_stringlist_to_csv_file(fName, outputString):
 ######### roiImagePath ==>> define at beginning of main.py ###################
 #########  roiDF ==>> define the data frame earlier on in the code ###########
 
-# def findMinDistToROI(ref_fix, roiDf, roiImagePath, numSegsX=4, numSegsY=8):
-#     if fixIn['idx'] % 50 == 0:
-#         logger.info('Finding minimum distance for fix ' + str(fixIn['idx']))
+# def findMinDistToROI(fixIn, roiDf, roi_image_path, nRowsImg, nColsImg, x_avg, y_avg):
+#
+#     ##### FIXIN == FIXATION IN REFERENCE IMAGE I.E REF_FIX
+#     ##### ROIDF == I HAVE NO IDEA BUT ITS FROM THE CACHE FILE
+#     #
+#     # if fixIn['idx'] % 50 == 0:
+#     #     logger.info('Finding minimum distance for fix ' + str(fixIn['idx']))
+#
 #
 #     def minDistToAnRoi(fixIn, roiIn, maskedImgIn):
 #
 #         # In:  fixation point, RGB vals of an ROI, roiImage with ROI region defined by pixel RGB vals
 #         # Find minimum distance from a fixation point to a region of interest
 #
+#         ####### NEED TO CHANGE THIS PART ########
 #         x = int(fixIn['fixNormX'] * np.shape(maskedImgIn)[1])
 #         y = int(fixIn['fixNormY'] * np.shape(maskedImgIn)[0])
 #
@@ -694,31 +707,29 @@ def append_stringlist_to_csv_file(fName, outputString):
 #         # print('No roi in this fixation''s segment')
 #         return {'nearestROI': np.nan, 'distToNearestROI': np.nan, 'roiDistances': []}
 #     else:
-#         roiImg = cv2.imread(roiImagePath)
-#
-#         if( roiImg is  None):
-#             logger.error('Invalid ROI file.')
+#         roiImg = cv2.imread(roi_image_path)
 #
 #         # Find pixels in the segment
-#         billHeightPx = np.shape(roiImg)[0] / numSegsX
-#         billWidthPx = np.shape(roiImg)[1] / numSegsY
+#         billHeightPx = np.shape(roiImg)[0] / nRowsImg
+#         billWidthPx = np.shape(roiImg)[1] / nColsImg
 #
 #         # np.min([billHeightPx,billWidthPx])
 #         # Mask the segment in the ROI image
 #         lBound = int(billWidthPx * fixIn['Xseg'])
 #         tBound = int(billHeightPx * fixIn['Yseg'])
+#
 #         segMask = np.zeros(roiImg.shape[:2], np.uint8)
 #         segMask[tBound:int(tBound + billHeightPx), lBound:int(lBound + billWidthPx)] = 255
+#
 #         roiSegImg = cv2.bitwise_and(roiImg, roiImg, mask=segMask)
 #         roiSegImg = cv2.cvtColor(roiSegImg, cv2.COLOR_BGR2RGB)
-#
-#
 #
 #         # Fix not in an ROI.  Find nearest.
 #
 #         # Find min fix-to-pixel dist for each ROI
 #         # minDistToROI_roi for this fix will be of len(roiInSegDf)
 #         minDistToROI_roi = roiInSegDf.apply(lambda roi: minDistToAnRoi(fixIn, roi, roiSegImg), axis=1)
+#
 #         # Find min fix-to-roi distance among all distances
 #         minIdx = roiInSegDf['idx'].iloc[np.nanargmin(minDistToROI_roi)]
 #         minVal = np.min(minDistToROI_roi[np.isfinite(minDistToROI_roi)])  # nan min was having issues.
@@ -727,7 +738,7 @@ def append_stringlist_to_csv_file(fName, outputString):
 #
 #     #return {'nearestROI': minIdx, 'distToNearestROI': minVal, 'roiDistances': np.array(minDistToROI_roi.values,dtype=np.float) }
 #     return {'nearestROI': minIdx, 'distToNearestROI': minVal}
-#
+
 
 ######################################################################################################
 ######################################################################################################

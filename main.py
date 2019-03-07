@@ -41,7 +41,7 @@ subjPath = basePath + subj
 trialPath = subjPath + trial
 
 start_fixation = 3850  # 330  # S28: Frames 6160 - 26350 = Fixations 300 - 3451
-end_fixation = 3875  # to code all
+end_fixation = 3865  # to code all
 
 ### list of fixations to exclude(calibration etc) ###
 # exclude_fixations = []  # default if no fixations are excluded
@@ -144,7 +144,7 @@ currentFrame = 0
 reference_frame_fixations = []
 
 ### create header for csv file to be exported ###
-csv_header = 'subjectNumber,refImage,Frame,Fixation,FrameFixX,' \
+csv_header = 'Frame,Fixation,FrameFixX,' \
                 'FrameFixY,RefFixX,RefFixY, IndexX, IndexY'
 
 output_string = []
@@ -197,7 +197,7 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         ######## same with object detection --> try/except      ##########
         ##################################################################
         try:
-            index_x, index_y, obj_height, obj_width = fn.object_detect(ref_img, distance_points, segW, segH, nRowsRefImg, nColsRefImg, mask)
+            index_x, index_y, obj_height, obj_width, x_avg, y_avg = fn.object_detect(ref_img, distance_points, segW, segH, nRowsRefImg, nColsRefImg, mask)
         except Exception as errMsg:
             print("Error has occured for frame {} ... {}".format(currentFrame, errMsg))
             currentFrame += 1
@@ -239,9 +239,12 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         else:
             break
 
+        ref_pos_x = int(index_x / obj_width)
+        ref_pos_y = int(index_y / obj_height)
+
         ### create output string for .csv file that will be exported ###
-        output_string_list = "{}, {}, {}, {}, {}, {}, {}, {}, {}, {}".format(subjNum, refImgFname, currentFrame, fixTableIdx, fixPosXY[0],
-                                                        fixPosXY[1], ref_fix[0], ref_fix[1], index_x, index_y)
+        output_string_list = "{}, {}, {}, {}, {}, {}, {}, {}".format(currentFrame, fixTableIdx, fixPosXY[0],
+                                                        fixPosXY[1], ref_fix[0], ref_fix[1], ref_pos_x, ref_pos_y)
 
         output_string.append(output_string_list)
 
@@ -291,4 +294,4 @@ cv2.destroyAllWindows()
 
 ### print out total time it took ###
 elapsedTime = time.time() - startTime
-print('Subject {} process is complete. Elapsed time is {} for {} frames and {} fixations'.format(subjNum, elapsedTime, currentFrame, nFixations))
+print('Subject {} process is complete. Elapsed time is {} for {} fixations'.format(subjNum, elapsedTime, end_fixation - start_fixation))
