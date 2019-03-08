@@ -673,72 +673,63 @@ def get_refImgRegion_labels():
 ######### roiImagePath ==>> define at beginning of main.py ###################
 #########  roiDF ==>> define the data frame earlier on in the code ###########
 
-# def findMinDistToROI(fixIn, roiDf, roi_image_path, nRowsImg, nColsImg, x_avg, y_avg):
-#
-#     ##### FIXIN == FIXATION IN REFERENCE IMAGE I.E REF_FIX
-#     ##### ROIDF == I HAVE NO IDEA BUT ITS FROM THE CACHE FILE
-#     #
-#     # if fixIn['idx'] % 50 == 0:
-#     #     logger.info('Finding minimum distance for fix ' + str(fixIn['idx']))
-#
-#
-#     def minDistToAnRoi(fixIn, roiIn, maskedImgIn):
-#
-#         # In:  fixation point, RGB vals of an ROI, roiImage with ROI region defined by pixel RGB vals
-#         # Find minimum distance from a fixation point to a region of interest
-#
-#         ####### NEED TO CHANGE THIS PART ########
-#         x = int(fixIn['fixNormX'] * np.shape(maskedImgIn)[1])
-#         y = int(fixIn['fixNormY'] * np.shape(maskedImgIn)[0])
-#
-#         colorMask = cv2.inRange(maskedImgIn, roiIn['colorVal'], roiIn['colorVal'])
-#
-#         distToPixelInRoi_px = [np.sqrt(np.nansum(np.power([x - mask_yx[1], y - mask_yx[0]], 2)))
-#                                for mask_yx in np.array(np.where(colorMask)).T]
-#
-#         # minDist to ROI of ALL ROI
-#         return np.nanmin(distToPixelInRoi_px)
-#
-#     # Select only those RGB within the same segment as the fixation
-#     roiInSegDf = roiDf[(roiDf['Xseg'] == fixIn['Xseg']) & (roiDf['Yseg'] == fixIn['Yseg'])]
-#
-#     # Check to see if there are ROI in this segment
-#     if (roiInSegDf.empty):
-#         # print('No roi in this fixation''s segment')
-#         return {'nearestROI': np.nan, 'distToNearestROI': np.nan, 'roiDistances': []}
-#     else:
-#         roiImg = cv2.imread(roi_image_path)
-#
-#         # Find pixels in the segment
-#         billHeightPx = np.shape(roiImg)[0] / nRowsImg
-#         billWidthPx = np.shape(roiImg)[1] / nColsImg
-#
-#         # np.min([billHeightPx,billWidthPx])
-#         # Mask the segment in the ROI image
-#         lBound = int(billWidthPx * fixIn['Xseg'])
-#         tBound = int(billHeightPx * fixIn['Yseg'])
-#
-#         segMask = np.zeros(roiImg.shape[:2], np.uint8)
-#         segMask[tBound:int(tBound + billHeightPx), lBound:int(lBound + billWidthPx)] = 255
-#
-#         roiSegImg = cv2.bitwise_and(roiImg, roiImg, mask=segMask)
-#         roiSegImg = cv2.cvtColor(roiSegImg, cv2.COLOR_BGR2RGB)
-#
-#         # Fix not in an ROI.  Find nearest.
-#
-#         # Find min fix-to-pixel dist for each ROI
-#         # minDistToROI_roi for this fix will be of len(roiInSegDf)
-#         minDistToROI_roi = roiInSegDf.apply(lambda roi: minDistToAnRoi(fixIn, roi, roiSegImg), axis=1)
-#
-#         # Find min fix-to-roi distance among all distances
-#         minIdx = roiInSegDf['idx'].iloc[np.nanargmin(minDistToROI_roi)]
-#         minVal = np.min(minDistToROI_roi[np.isfinite(minDistToROI_roi)])  # nan min was having issues.
-#
-#     minVal = minVal / np.min([billHeightPx, billWidthPx])
-#
-#     #return {'nearestROI': minIdx, 'distToNearestROI': minVal, 'roiDistances': np.array(minDistToROI_roi.values,dtype=np.float) }
-#     return {'nearestROI': minIdx, 'distToNearestROI': minVal}
+def find_min_dist_to_ROI(fixIn, roiDf, roi_image, nRowsImg, nColsImg):
 
+    def minDistToAnRoi(fixIn, roiIn, maskedImgIn):
+
+        # In:  fixation point, RGB vals of an ROI, roiImage with ROI region defined by pixel RGB vals
+        # Find minimum distance from a fixation point to a region of interest
+
+        ####### NEED TO CHANGE THIS PART ########
+        x = int(fixIn['fixNormX'] * np.shape(maskedImgIn)[1])
+        y = int(fixIn['fixNormY'] * np.shape(maskedImgIn)[0])
+
+        colorMask = cv2.inRange(maskedImgIn, roiIn['colorVal'], roiIn['colorVal'])
+
+        distToPixelInRoi_px = [np.sqrt(np.nansum(np.power([x - mask_yx[1], y - mask_yx[0]], 2)))
+                               for mask_yx in np.array(np.where(colorMask)).T]
+
+        # minDist to ROI of ALL ROI
+        return np.nanmin(distToPixelInRoi_px)
+
+    # Select only those RGB within the same segment as the fixation
+    roiInSegDf = roiDf[(roiDf['Xseg'] == fixIn['Xseg']) & (roiDf['Yseg'] == fixIn['Yseg'])]
+
+    # Check to see if there are ROI in this segment
+    if (roiInSegDf.empty):
+        # print('No roi in this fixation''s segment')
+        return {'nearestROI': np.nan, 'distToNearestROI': np.nan, 'roiDistances': []}
+    else:
+
+        # Find pixels in the segment
+        billHeightPx = np.shape(roi_image)[0] / nRowsImg
+        billWidthPx = np.shape(roi_image)[1] / nColsImg
+
+        # np.min([billHeightPx,billWidthPx])
+        # Mask the segment in the ROI image
+        lBound = int(billWidthPx * fixIn['Xseg'])
+        tBound = int(billHeightPx * fixIn['Yseg'])
+
+        segMask = np.zeros(roi_image.shape[:2], np.uint8)
+        segMask[tBound:int(tBound + billHeightPx), lBound:int(lBound + billWidthPx)] = 255
+
+        roiSegImg = cv2.bitwise_and(roi_image, roi_image, mask=segMask)
+        roiSegImg = cv2.cvtColor(roiSegImg, cv2.COLOR_BGR2RGB)
+
+        # Fix not in an ROI.  Find nearest.
+
+        # Find min fix-to-pixel dist for each ROI
+        # minDistToROI_roi for this fix will be of len(roiInSegDf)
+        minDistToROI_roi = roiInSegDf.apply(lambda row: minDistToAnRoi(fixIn, row, roiSegImg), axis=1)
+
+        # Find min fix-to-roi distance among all distances
+        minIdx = roiInSegDf['idx'].iloc[np.nanargmin(minDistToROI_roi)]
+        minVal = np.min(minDistToROI_roi[np.isfinite(minDistToROI_roi)])  # nan min was having issues.
+
+    minVal = minVal / np.min([billHeightPx, billWidthPx])
+
+    #return {'nearestROI': minIdx, 'distToNearestROI': minVal, 'roiDistances': np.array(minDistToROI_roi.values,dtype=np.float) }
+    return {'nearestROI': minIdx, 'distToNearestROI': minVal}
 
 ######################################################################################################
 ######################################################################################################
