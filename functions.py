@@ -673,7 +673,9 @@ def get_refImgRegion_labels():
 ######### roiImagePath ==>> define at beginning of main.py ###################
 #########  roiDF ==>> define the data frame earlier on in the code ###########
 
-def find_min_dist_to_ROI(fixIn, roiDf, roi_image, nRowsImg, nColsImg):
+def find_min_dist_to_ROI(fixIn, roi_image, nRowsImg, nColsImg):
+
+    roiDf = createRoiDf(roi_image, nColsImg, nRowsImg)
 
     def minDistToAnRoi(fixIn, roiIn, maskedImgIn):
 
@@ -681,8 +683,8 @@ def find_min_dist_to_ROI(fixIn, roiDf, roi_image, nRowsImg, nColsImg):
         # Find minimum distance from a fixation point to a region of interest
 
         ####### NEED TO CHANGE THIS PART ########
-        x = int(fixIn['fixNormX'] * np.shape(maskedImgIn)[1])
-        y = int(fixIn['fixNormY'] * np.shape(maskedImgIn)[0])
+        x = int(fixIn['norm_pos_x'] * np.shape(maskedImgIn)[1])
+        y = int(fixIn['norm_pos_y'] * np.shape(maskedImgIn)[0])
 
         colorMask = cv2.inRange(maskedImgIn, roiIn['colorVal'], roiIn['colorVal'])
 
@@ -733,6 +735,55 @@ def find_min_dist_to_ROI(fixIn, roiDf, roi_image, nRowsImg, nColsImg):
 
 ######################################################################################################
 ######################################################################################################
+
+def createRoiDf(roiFileName, numSegsX, numSegsY):
+    '''
+    Input: Takes as input an image with color coded ROI in RGB space
+    Returns: A dataframe where rows are regions of interest
+    '''
+
+    # logger.info('Finding ROI in image file.')
+
+    roiImg = cv2.imread(roiFileName)
+
+    # Find pixels in the segment
+    billHeightPx = np.shape(roiImg)[0] / numSegsY
+    billWidthPx = np.shape(roiImg)[1] / numSegsX
+
+    roiDicts = []
+
+    for segX in range(numSegsX):
+        for segY in range(numSegsY):
+
+            # Mask the segment in the ROI image
+            lBound = int(billWidthPx * segX)
+            tBound = int(billHeightPx * segY)
+            segMask = np.zeros(roiImg.shape[:2], np.uint8)
+            segMask[tBound:int(tBound + billHeightPx), lBound:int(lBound + billWidthPx)] = 255
+            roiSegImg = cv2.bitwise_and(roiImg, roiImg, mask=segMask)
+            roiSegImg = cv2.cvtColor(roiSegImg, cv2.COLOR_BGR2RGB)
+
+            # Find unique ROI within masked segment.
+            # Surprisingly, this block takes the longest to compute.
+            uniqueColors_roi = list(set(tuple(v) for m2d in roiSegImg for v in m2d))
+            uniqueColors_roi.remove((255, 255, 255))
+            uniqueColors_roi.remove((0, 0, 0))
+            uniqueColors_roi = np.array(uniqueColors_roi, dtype="uint8")
+
+            # Append ROI info to roiDicts (a list of dicts)
+            for roiColor in uniqueColors_roi:
+                # Find center of ROI on this segment
+                roiMask = cv2.inRange(roiSegImg, roiColor, roiColor)
+                maskCenter_YX = np.mean(np.where(roiMask), axis=1)
+
+                roiDicts.append({'colorVal': np.array(roiColor, dtype="uint8"), 'Xseg': segX, 'Yseg': segY,
+                                 'centroidX': maskCenter_YX[1],
+                                 'centroidY': maskCenter_YX[0]})
+
+    roiDf = pd.DataFrame(roiDicts)
+    roiDf['idx'] = range(0, len(roiDf))
+
+    return roiDf
 
 ######################################################################################################
 ######################################################################################################

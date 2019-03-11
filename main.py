@@ -18,7 +18,6 @@ basePath = '/Users/sheelaahmed/Desktop/NAS/'
 
 refImgFname = basePath + 'RefImg_Series_205x490.jpg'
 
-
 ### read in ROI image, ROI Labels pickle file, and DF pickle file ###
 roiImagePath = basePath + 'roi400.png'
 roiImage = cv2.imread(roiImagePath)
@@ -61,7 +60,6 @@ allTrialDataDf = pd.read_pickle(basePath + 'allData.pickle')
 fixIn = allTrialDataDf.iloc[start_fixation:end_fixation]
 
 ### list of fixations to exclude(calibration etc) ###
-# exclude_fixations = []  # default if no fixations are excluded
 exclude_fixations = list(np.r_[3920:4115, 4120:4315, 4320:5000, 5338:5652])
 
 ### define video and csv filenames ###
@@ -96,18 +94,12 @@ csvFileOpened = False
 DETECTOR = 'SIFT'
 MATCHER = 'FLANN'
 
-PERSPECTIVE_TRANSFORM = False
-
 VIDEO_WIDTH = 1280  # default - can be overwritten by raw video
 VIDEO_HEIGHT = 720  # default
 
 ### determine segments in the reference image ###
 segmentedReferenceImage, segW, segH, nRowsRefImg, nColsRefImg = \
     fn.determine_segments_from_fname_and_image(refImgFname, ref_Img)
-
-##############################################
-#####comment all of these lines as well ######
-##############################################
 
 # Read data into a pandas dataframe
 fixationDataPD = pd.read_csv(fixationCSVfName)
@@ -117,6 +109,7 @@ ctr_fixation_series = pd.Series((fixationDataPD['start_frame_index'] + fixationD
                                 name='center_frame')
 fixationDataPD = pd.concat([fixationDataPD, ctr_fixation_series], axis=1)
 
+### define start frame from the imported info of ID_assisted_defs ###
 FRAME_ = START_FRAME_
 headers = list(fixationDataPD)
 
@@ -160,6 +153,10 @@ currentFrame = 0
 
 ### initialize array for fixations in reference image ###
 reference_frame_fixations = []
+
+### initialize dictionary to fill with fixations and segments ###
+###to be used in distToROI at end ######
+# fixation_dict = {}
 
 #############################################
 ### create headers and strings for csv files to be exported ###
@@ -226,6 +223,10 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
             print("Error has occured for frame {} ... {}".format(currentFrame, errMsg))
             currentFrame += 1
 
+        ### define the x and y positions in the reference image ###
+        ref_pos_x = int(index_x / obj_width)
+        ref_pos_y = int(index_y / obj_height)
+
         ### if you want to display the matches between both images ####
         if PERSPECTIVE_TRANSFORM == True:
             detected_image = fn.perspectiveTransform(currentFrame, ref_img, mask, Matrix)
@@ -263,8 +264,23 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         else:
             break
 
-        ref_pos_x = int(index_x / obj_width)
-        ref_pos_y = int(index_y / obj_height)
+        ####### if lines below dont work, try this method with looping at end of code with plt ########
+        fixation_dict = {'norm_pos_x':fixationDataPD['norm_pos_x'], 'norm_pos_x':fixationDataPD['norm_pos_y'], 'Xseg':ref_pos_x, 'Yseg':ref_pos_y}
+
+            ###### test out the norm_pos_x and norm_pos_y columns to match dnfsdkk#####
+        ################################################################################
+        dictOut = fn.find_min_dist_to_ROI(fixation_dict, roiImage, nRowsRefImg, nColsRefImg)
+
+        output_ROI_string_list = '{}, {}, {}, {}, {}'.format(fixTableIdx, ref_fix[0], ref_fix[1], dictOut['nearestROI'], dictOut['distToNearestROI'])
+        output_string_ROI.append(output_ROI_string_list)
+
+        if not csvFileOpened:  # If we haven't started writing to the failsafe file yet:
+            fn.write_stringlist_to_csv_file(basePath + csv_ROI_filename, csv_ROI_header, output_string_ROI)
+            csvFileOpened = True
+
+        else:  # it's already started; just append the most recent row
+            fn.append_stringlist_to_csv_file(basePath + csv_ROI_filename, output_ROI_string_list)
+        ################################################################################
 
         ### create output string for .csv file that will be exported ###
         output_string_list = "{}, {}, {}, {}, {}, {}, {}, {}".format(currentFrame, fixTableIdx, fixPosXY[0],
@@ -297,7 +313,7 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
 
     fixTableIdx = fixTableIdx + 1
 
-print(reference_frame_fixations)
+# print(reference_frame_fixations)
 
 # x, y = reference_frame_fixations
 
@@ -313,18 +329,17 @@ axis.imshow(ref_img)
 plt.xlim([0, np.shape(ref_img)[1]])
 plt.ylim([np.shape(ref_img)[0], 0])
 for x, y in reference_frame_fixations:
-
-    dictOut = fn.find_min_dist_to_ROI(fixIn, roiDf, roiImage, nRowsRefImg, nColsRefImg)
-
-    output_ROI_string_list = '{}, {}, {}, {}, {}'.format(fixTableIdx, ref_fix[0], ref_fix[1], dictOut['nearestROI'], dictOut['distToNearestROI'])
-    output_string_ROI.append(output_ROI_string_list)
-
-    if not csvFileOpened:  # If we haven't started writing to the failsafe file yet:
-        fn.write_stringlist_to_csv_file(basePath + csv_ROI_filename, csv_ROI_header, output_string_ROI)
-        csvFileOpened = True
-
-    else:  # it's already started; just append the most recent row
-        fn.append_stringlist_to_csv_file(basePath + csv_ROI_filename, output_ROI_string_list)
+    # dictOut = fn.find_min_dist_to_ROI(fixIn, roiImage, nRowsRefImg, nColsRefImg)
+    #
+    # output_ROI_string_list = '{}, {}, {}, {}, {}'.format(fixTableIdx, ref_fix[0], ref_fix[1], dictOut['nearestROI'], dictOut['distToNearestROI'])
+    # output_string_ROI.append(output_ROI_string_list)
+    #
+    # if not csvFileOpened:  # If we haven't started writing to the failsafe file yet:
+    #     fn.write_stringlist_to_csv_file(basePath + csv_ROI_filename, csv_ROI_header, output_string_ROI)
+    #     csvFileOpened = True
+    #
+    # else:  # it's already started; just append the most recent row
+    #     fn.append_stringlist_to_csv_file(basePath + csv_ROI_filename, output_ROI_string_list)
 
     plt.scatter(x, y, s = 20, c = 'r')
 plt.show()
