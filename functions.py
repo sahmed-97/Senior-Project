@@ -5,6 +5,10 @@ import time
 import sys
 import av
 import matplotlib.pyplot as plt
+import pandas as pd
+import pickle
+import xlrd
+
 
 from ID_assisted_defs import ID_, CTR_FRAME_, START_FRAME_, DUR_, X_, Y_  # Indices into fixationTable
 from ID_assisted_defs import H_, W_  # fixBoxHW[]
@@ -673,26 +677,35 @@ def get_refImgRegion_labels():
 ######### roiImagePath ==>> define at beginning of main.py ###################
 #########  roiDF ==>> define the data frame earlier on in the code ###########
 
-def find_min_dist_to_ROI(fixIn, roi_image, nRowsImg, nColsImg):
+def find_min_dist_to_ROI(fixIn, roiDf, fixationDataPD, roi_image, nRowsImg, nColsImg):
 
-    roiDf = createRoiDf(roi_image, nColsImg, nRowsImg)
+    # roiDf = createRoiDf(roi_image, nColsImg, nRowsImg)
 
-    def minDistToAnRoi(fixIn, roiIn, maskedImgIn):
+    def minDistToAnRoi(fixationDataPD, roiIn, maskedImgIn):
 
         # In:  fixation point, RGB vals of an ROI, roiImage with ROI region defined by pixel RGB vals
         # Find minimum distance from a fixation point to a region of interest
 
-        ####### NEED TO CHANGE THIS PART ########
-        x = int(fixIn['norm_pos_x'] * np.shape(maskedImgIn)[1])
-        y = int(fixIn['norm_pos_y'] * np.shape(maskedImgIn)[0])
+        x = int(fixationDataPD['fixNormX'] * np.shape(maskedImgIn)[1])
+        y = int(fixationDataPD['fixNormY'] * np.shape(maskedImgIn)[0])
 
         colorMask = cv2.inRange(maskedImgIn, roiIn['colorVal'], roiIn['colorVal'])
 
         distToPixelInRoi_px = [np.sqrt(np.nansum(np.power([x - mask_yx[1], y - mask_yx[0]], 2)))
                                for mask_yx in np.array(np.where(colorMask)).T]
 
+        ### try to see if the minimum distance can be returned ###
+        ### was returning a None for some indices ###
+        try:
+            min = np.nanmin(distToPixelInRoi_px)
+
+        ### if not, the return an arbitraty nan ###
+        except:
+            min = np.nan
+            pass
+
         # minDist to ROI of ALL ROI
-        return np.nanmin(distToPixelInRoi_px)
+        return min
 
     # Select only those RGB within the same segment as the fixation
     roiInSegDf = roiDf[(roiDf['Xseg'] == fixIn['Xseg']) & (roiDf['Yseg'] == fixIn['Yseg'])]
@@ -736,7 +749,7 @@ def find_min_dist_to_ROI(fixIn, roi_image, nRowsImg, nColsImg):
 ######################################################################################################
 ######################################################################################################
 
-def createRoiDf(roiFileName, numSegsX, numSegsY):
+def createRoiDf(roiImg, numSegsX, numSegsY):
     '''
     Input: Takes as input an image with color coded ROI in RGB space
     Returns: A dataframe where rows are regions of interest
@@ -744,7 +757,7 @@ def createRoiDf(roiFileName, numSegsX, numSegsY):
 
     # logger.info('Finding ROI in image file.')
 
-    roiImg = cv2.imread(roiFileName)
+    # roiImg = cv2.imread(roiFileName)
 
     # Find pixels in the segment
     billHeightPx = np.shape(roiImg)[0] / numSegsY
