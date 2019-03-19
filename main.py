@@ -54,7 +54,7 @@ subjPath = basePath + subj
 trialPath = subjPath + trial
 
 start_fixation = 3850  # 330  # S28: Frames 6160 - 26350 = Fixations 300 - 3451
-end_fixation = 3900  # to code all
+end_fixation = 3875  # to code all
 
 # allTrialDataDf = pd.read_pickle(basePath + 'allData.pickle')
 # fixIn = allTrialDataDf.iloc[200]
@@ -300,11 +300,12 @@ fixation_dict['fixNormY'] = fixation_dict['fixY'] / np.shape(ref_Img)[0]
 
 
 distToROI_fix = fixation_dict.apply(lambda row: fn.find_min_dist_to_ROI(row,roiDf,fixationDataPD, roiImage, nRowsRefImg, nColsRefImg),axis=1)
-print(distToROI_fix)
+# print(distToROI_fix)
 
 # Add the values implied by dict keys in distToROI_fix to fixDf
 fixation_dict = fixation_dict.combine_first(pd.DataFrame.from_records(distToROI_fix))
 # fixation_dict['subjectID'] = subID
+print('fixation dictionary')
 print(fixation_dict)
 
 fixation_dict.to_pickle(pickle_object_filename)

@@ -679,7 +679,7 @@ def get_refImgRegion_labels():
 
 def find_min_dist_to_ROI(fixIn, roiDf, fixationDataPD, roi_image, nRowsImg, nColsImg):
 
-    # roiDf = createRoiDf(roi_image, nColsImg, nRowsImg)
+    roiDf = createRoiDf(roi_image, nColsImg, nRowsImg)
 
     def minDistToAnRoi(fixationDataPD, roiIn, maskedImgIn):
 
@@ -693,16 +693,9 @@ def find_min_dist_to_ROI(fixIn, roiDf, fixationDataPD, roi_image, nRowsImg, nCol
 
         distToPixelInRoi_px = [np.sqrt(np.nansum(np.power([x - mask_yx[1], y - mask_yx[0]], 2)))
                                for mask_yx in np.array(np.where(colorMask)).T]
+        # print(distToPixelInRoi_px)
 
-        ### try to see if the minimum distance can be returned ###
-        ### was returning a None for some indices ###
-        try:
-            min = np.nanmin(distToPixelInRoi_px)
-
-        ### if not, the return an arbitraty nan ###
-        except:
-            min = np.nan
-            pass
+        min = np.min(distToPixelInRoi_px)
 
         # minDist to ROI of ALL ROI
         return min
@@ -714,6 +707,7 @@ def find_min_dist_to_ROI(fixIn, roiDf, fixationDataPD, roi_image, nRowsImg, nCol
     if (roiInSegDf.empty):
         # print('No roi in this fixation''s segment')
         return {'nearestROI': np.nan, 'distToNearestROI': np.nan, 'roiDistances': []}
+
     else:
 
         # Find pixels in the segment
@@ -739,7 +733,8 @@ def find_min_dist_to_ROI(fixIn, roiDf, fixationDataPD, roi_image, nRowsImg, nCol
 
         # Find min fix-to-roi distance among all distances
         minIdx = roiInSegDf['idx'].iloc[np.nanargmin(minDistToROI_roi)]
-        minVal = np.min(minDistToROI_roi[np.isfinite(minDistToROI_roi)])  # nan min was having issues.
+        # minVal = np.nanmin(minDistToROI_roi[np.isfinite(minDistToROI_roi)])  # nan min was having issues.
+        minVal = np.min(minDistToROI_roi)
 
     minVal = minVal / np.min([billHeightPx, billWidthPx])
 
