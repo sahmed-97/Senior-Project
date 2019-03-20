@@ -198,10 +198,7 @@ def grab_video_frame(avObj, streamObj, vidObjDict, ticksPerFrame, frameNumToRead
 
 def feature_detect(frame, frameMask, ref_img, method=DETECTOR, matcher=MATCHER):
 
-    #src_pts = 0
-    #dst_pts = 0
     ### choose which one when calling function; by default, method is SIFT ###
-
     if method == "SIFT":
         det = cv2.xfeatures2d.SIFT_create()
 
@@ -321,38 +318,6 @@ def object_detect(ref_img, dst_pts, segW, segH, nRowsImg, nColsImg, mask):
 
     ### return these four coords to draw a rectangle in display_image function ###
     return index_x, index_y, obj_height, obj_width, x_avg, y_avg
-
-############################################################################################################
-############################################################################################################
-######### This part of code draws matches and does perspective transform for feature matching ###############
-
-def perspectiveTransform(file, ref_img, kp1, kp2, good, matches, matchesMask, mask, M, method=DETECTOR):
-
-    height,width = file.shape[:2]
-    pts = np.float32([[0,0], [0,height-1], [width-1,height-1], [width-1,0]]).reshape(-1,1,2)
-    ### do a perspective transform
-    dst = cv2.perspectiveTransform(pts,M)
-
-    img3 = cv2.polylines(ref_img,[np.int32(dst)],True,255,3, cv2.LINE_AA)
-
-    draw_params = dict(matchColor = (255,0,0), singlePointColor = None,
-        matchesMask = matchesMask,flags=2)
-
-    ### Draw a bounding box around the best match in the reference image ###
-    ### for SIFT or SURF, need to use 'good' matches ###
-    ### for ORB, just use matches because not enough keypoints for detection if good matches is done ###
-
-    if method == "SIFT" or method == "SURF":
-        img3 = cv2.drawMatches(file, kp1, ref_img, kp2, good, None, **draw_params)
-
-    elif method == "ORB":
-        img3 = cv2.drawMatches(file, kp1, ref_img, kp2, matches, None, **draw_params)
-
-    textScale = 1.25
-    cv2.putText(img3, '{} matches'.format(len(matches)), (3, 150), FONT, textScale, (255,255,255), 1, cv2.LINE_AA)
-    cv2.putText(img3, 'detection method = {}'.format(method), (5, int(100*textScale)), FONT, 1.0*textScale, (255,255,255), 1, cv2.LINE_AA)
-
-    return img3
 
 ##############################################################################################################
 ##############################################################################################################
@@ -525,7 +490,6 @@ def vstack_images(img_top, img_bottom, border=0):
 
     if img_top.shape[2] == 3:  # color image
         # create empty matrix
-        # stackImg = np.zeros((max(hT, hB), wT + wB, 3), np.uint8)
         stackImg = np.zeros(((hT + hB), max(wT, wB), 3), np.uint8)
 
         # combine 2 images
@@ -534,7 +498,6 @@ def vstack_images(img_top, img_bottom, border=0):
 
     else: # monochrome image
         # create empty matrix
-        # stackImg = np.zeros((max(hT, hB), wT + wB, 2), np.uint8)
         stackImg = np.zeros(((hT + hB), max(wT, wB), 2), np.uint8)
 
         # combine 2 images
@@ -556,7 +519,6 @@ def object_display_image(ref_img, test_img,fixRegionImg, fixPosXY, index_x, inde
 
     ### concatenate a 1 to the end of the coordinate to be able to multiply by 3x3 Homography Matrix ###
     fixPosXY = np.concatenate((fixPosXY, 1), axis=None)
-    # print('frame fixation = {}'.format(fixPosXY))
 
     ### use try/except to move past errors when there is no homography matrix for frame ###
     ### errors in homography matrix can occur when fixation isn't on the object, so not enough kpts for matrix ###
@@ -588,11 +550,6 @@ def object_display_image(ref_img, test_img,fixRegionImg, fixPosXY, index_x, inde
 
     ### hstack final image with the frame/fixRegion combo ###
     displayImg = hstack(left_img, result, border=2)
-
-    # draw_params = dict(matchColor = (255,0,0), singlePointColor = None,
-    #     matchesMask = mask,flags=2)
-    #
-    # displayImg = cv2.drawMatchesKnn(fixRegionImg, kp1, ref_img, kp2, good_matches, None, **draw_params)
 
     ### Text to add to image window ###
     frame_text = "Current frame: {}".format(currentFrame)
@@ -652,40 +609,20 @@ def append_stringlist_to_csv_file(fName, outputString):
 ########### Now begins the process to calculate distance to ROI and visualizing statistics ##########
 ######################################################################################################
 
-def get_refImgRegion_labels():
-    refImgRegionLabelDict = {0:'1_2003',     1:'1_2003_Reverse',
-                             2:'5_2003',     3:'5_2003_Reverse',
-                             4:'5_2009',     5:'5_2009_Reverse',
-                             6:'ctr_check',  7:'calibration',
-                             8:'10_2003',    9:'10_2003_Reverse',
-                             10:'10_2009',  11:'10_2009_Reverse',
-                             12:'blank',    13:'blank', 14:'blank', 15:'experimenter',
-                             16:'20_2001',  17:'20_2001_Reverse',
-                             18:'20_2009',  19:'20_2009_Reverse',
-                             20:'blank',    21:'blank', 22:'blank', 23:'blank',
-                             24:'50_2001',  25:'50_2001_Reverse',
-                             26:'50_2006',  27:'50_2006_Reverse',
-                             28:'100_2006', 29:'100_2006_Reverse',
-                             30:'100_2009', 31:'100_2009_Reverse',
-                             -9:'null'}
-
-    return refImgRegionLabelDict
-
 ######################################################################################################
 ######################################################################################################
 
-######### roiImagePath ==>> define at beginning of main.py ###################
 #########  roiDF ==>> define the data frame earlier on in the code ###########
 
-def find_min_dist_to_ROI(fixIn, roiDf, fixationDataPD, roi_image, nRowsImg, nColsImg):
+def find_min_dist_to_ROI(fixIn, roiDf, fixationDataPD, roi_image, nRowsImg, nColsImg, recalculateROI=False):
 
-    roiDf = createRoiDf(roi_image, nColsImg, nRowsImg)
+    if recalculateROI == True:
+        roiDf = createRoiDf(roi_image, nColsImg, nRowsImg)
 
     def minDistToAnRoi(fixationDataPD, roiIn, maskedImgIn):
 
         # In:  fixation point, RGB vals of an ROI, roiImage with ROI region defined by pixel RGB vals
         # Find minimum distance from a fixation point to a region of interest
-
         x = int(fixationDataPD['fixNormX'] * np.shape(maskedImgIn)[1])
         y = int(fixationDataPD['fixNormY'] * np.shape(maskedImgIn)[0])
 
@@ -749,11 +686,6 @@ def createRoiDf(roiImg, numSegsX, numSegsY):
     Input: Takes as input an image with color coded ROI in RGB space
     Returns: A dataframe where rows are regions of interest
     '''
-
-    # logger.info('Finding ROI in image file.')
-
-    # roiImg = cv2.imread(roiFileName)
-
     # Find pixels in the segment
     billHeightPx = np.shape(roiImg)[0] / numSegsY
     billWidthPx = np.shape(roiImg)[1] / numSegsX
@@ -792,73 +724,6 @@ def createRoiDf(roiImg, numSegsX, numSegsY):
     roiDf['idx'] = range(0, len(roiDf))
 
     return roiDf
-
-######################################################################################################
-######################################################################################################
-
-######################################################################################################
-######################################################################################################
-
-##############################################################################################################
-##############################################################################################################
-############################## object detection for the test images ##########################################
-
-def object_detect_test(test_img, ref_img, dst_pts, mask):
-
-    ### squeeze dst pts to make a (67,2) array
-    dst_pts = np.squeeze(dst_pts, axis=1)
-
-    ### multiple dst pts by the mask to get the coordinate points in the reference image
-    coords = dst_pts * mask
-
-    ### want to find all coordinates that aren't 0,0. ###
-    ### iterate through coordinates and add to the total_nonzero count if coordinates aren't 0,0 ###
-    total_nonzero = 0
-    for (x,y) in coords:
-        if (x,y) == (0,0):
-            continue
-        else:
-            total_nonzero += 1
-
-            ### sum up the coordinates and set equal to the total x and y ###
-            x_total, y_total = np.sum(coords, axis = 0)
-
-            ### height and width of ref image ###
-            ref_img_height, ref_img_width = ref_img.shape[:2]
-
-            ### may need to define the number of rows and columns in ref image corresponding to the number of objects within ###
-            ### if 3x2 objects, set rows to 2 and columns to 3
-            ref_img_rows = 2
-            ref_img_cols = 3
-
-            ### define the height and width of the object to be the total ref img height/width divided by the rows and columns ###
-            ### if ref img height = 240 snd there are 4 rows, obj height will be 60 ###
-            obj_height = int(ref_img_height/ref_img_rows)
-            obj_width = int(ref_img_width/ref_img_cols)
-
-            ### find the avg coordinate by dividing the total sum by the number of nonzero coordinates ###
-            ### basically finding single coordinate point that averages out all coordinates ###
-            ### location will be where highest concentration of coordinates are, ergo the best matching region ###
-            x_avg = x_total/total_nonzero
-            y_avg = y_total/total_nonzero
-
-            ### create index x and y points
-            index_x = int(x_avg/obj_width)
-            index_y = int(y_avg/obj_height)
-
-            ### multiple indexes by the obj height and width to make index be size of each object ###
-            ### change in index moves one object at a time rather than one pixel at a time ###
-            index_x = int((index_x) * obj_width)
-            index_y = int((index_y) * obj_height)
-
-            ### draw circle around the initial index coordinate (optional) ###
-            img3 = cv2.circle(ref_img, (x_avg, y_avg), 10, WHITE, 3)
-
-            ### create rectangle starting at index point and making second point be index + obj height/width ###
-            img3 = cv2.rectangle(ref_img, (index_x, index_y), (index_x + obj_width, index_y+obj_height), GREEN, 8)
-
-
-            return img3
 
 ######################################################################################################
 ######################################################################################################

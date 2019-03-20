@@ -25,7 +25,7 @@ roiImage = cv2.imread(roiImagePath)
 roiLabelsPath = basePath + 'roiLabels.xlsx'
 roiLabels = pd.read_excel(roiLabelsPath)
 
-roiDfPath = basePath + 'roiCache.pickle'
+roiDfPath = basePath + 'ROI_Dataframe.pickle'
 roiDf = pd.read_pickle(roiDfPath)
 
 ### DEFINE SUBJECT NUMBER ###
@@ -55,9 +55,6 @@ trialPath = subjPath + trial
 
 start_fixation = 3850  # 330  # S28: Frames 6160 - 26350 = Fixations 300 - 3451
 end_fixation = 3875  # to code all
-
-# allTrialDataDf = pd.read_pickle(basePath + 'allData.pickle')
-# fixIn = allTrialDataDf.iloc[200]
 
 ### list of fixations to exclude(calibration etc) ###
 exclude_fixations = list(np.r_[3920:4115, 4120:4315, 4320:5000, 5338:5652])
@@ -118,7 +115,6 @@ fixationTable = np.transpose(np.array([fixationDataPD['id'], fixationDataPD['cen
                                        fixationDataPD['duration'], fixationDataPD['norm_pos_x'] * VIDEO_WIDTH,
                                        VIDEO_HEIGHT - (fixationDataPD['norm_pos_y'] * VIDEO_HEIGHT)]))
 fixationTable = fixationTable.astype(int)  # Convert center frames to integer
-# fixationTable[:, 0] = fixationTable[:,0].astype(int)  # Convert center frames to integer
 
 ### get number of fixations in the table
 # nFixations = end_fixation - start_fixation
@@ -154,17 +150,13 @@ currentFrame = 0
 ### initialize array for fixations in reference image ###
 reference_frame_fixations = []
 
-### initialize dictionary to fill with fixations and segments ###
-###to be used in distToROI at end ######
-# fixation_dict = {}
-
 #############################################
 ### create headers and strings for csv files to be exported ###
 csv_object_header = ' Xseg,Yseg,Frame,Fixation,FrameFixX,' \
                 'FrameFixY,RefFixX,RefFixY, nearestROI'
 output_string_object = []
 
-# fixation_dict_header = 'Xseg,Yseg,norm_pos_x,norm_pos_y'
+### initialize dictionary to fill with fixations and segments ###
 fixation_dict = {}
 
 
@@ -178,8 +170,6 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
 
     ###define current frame as it iterates through the table ###
     currentFrame = nextFixationFrame
-    # firstFixationFrame = nextFixationFrame
-# while currentFile < totalFiles:
 
     # if currentFrame < firstFixationFrame:
     # fn.skip_forward_to_first_desired_frame(vidObjDict['vidObj'], firstFixationFrame, currentFrame)
@@ -228,17 +218,11 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         ref_pos_x = int(index_x / obj_width)
         ref_pos_y = int(index_y / obj_height)
 
-        ### append to lists of reference x and y ###
-        # ref_x.append(ref_pos_x)
-        # ref_y.append(ref_pos_y)
-
         ### create a display image name for each frame/image ###
         displayImg_name = ('displayImg_{}-'.format(currentFrame))
 
-
         ### display each resulting window ###
         ref_fix, displayImg = fn.object_display_image(ref_img, frame, fixRegionImg, fixPosXY, index_x, index_y, obj_height, obj_width, currentFrame, fixTableIdx, Matrix, mask, good_matches, frame_kp, ref_kp)
-        # cv2.imshow(displayImg_name, displayImg)
 
         ### append coordinate point to the list of reference coordinates ###
         reference_frame_fixations.append([ref_fix[0], ref_fix[1]])
@@ -260,9 +244,6 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
             break
 
         ### create output string for .csv file that will be exported ###
-        # output_string_list = "{}, {}, {}, {}, {}, {}, {}, {}".format(ref_pos_x, ref_pos_y, currentFrame, fixTableIdx, fixPosXY[0],
-        #                                                 fixPosXY[1], ref_fix[0], ref_fix[1])
-
         output_string_list = {'Xseg':ref_pos_x,'Yseg':ref_pos_y,'Frame':currentFrame,'Fixation':fixTableIdx,'fixX':fixPosXY[0]
                                  ,'fixY':fixPosXY[1],'RefFixX':ref_fix[0],'RefFixY':ref_fix[1]}
         output_string_object.append(output_string_list)
@@ -273,7 +254,6 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         ### Note: There are occasionally errors in the fixation files where adjacent fixations have the same frame number. ###
         ### This leads to loops where we just keep seeking higher frames, since we are already past the frame we wanted. ###
         ### So check for the special case where currentFrame > nextFixation frame ###
-
         if currentFrame > nextFixationFrame:
 
             ### prepare for next fixation in table ###
@@ -299,12 +279,11 @@ fixation_dict['fixNormX'] = fixation_dict['fixX'] / np.shape(ref_Img)[1]
 fixation_dict['fixNormY'] = fixation_dict['fixY'] / np.shape(ref_Img)[0]
 
 
-distToROI_fix = fixation_dict.apply(lambda row: fn.find_min_dist_to_ROI(row,roiDf,fixationDataPD, roiImage, nRowsRefImg, nColsRefImg),axis=1)
+distToROI_fix = fixation_dict.apply(lambda row: fn.find_min_dist_to_ROI(row,roiDf,fixationDataPD, roiImage, nRowsRefImg, nColsRefImg, recalculateROI=False),axis=1)
 # print(distToROI_fix)
 
 # Add the values implied by dict keys in distToROI_fix to fixDf
 fixation_dict = fixation_dict.combine_first(pd.DataFrame.from_records(distToROI_fix))
-# fixation_dict['subjectID'] = subID
 print('fixation dictionary')
 print(fixation_dict)
 
@@ -322,6 +301,7 @@ plt.show()
 # plt.savefig(basePath + 'Subject {} Fixation Plot {}.png'.format(subjNum, timeStr), bbox_inches='tight', transparent=True)
 cv2.destroyAllWindows()
 
+##################################################################################
 
 ### print out total time it took ###
 elapsedTime = time.time() - startTime
