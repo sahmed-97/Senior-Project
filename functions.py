@@ -311,7 +311,7 @@ def object_detect(ref_img, dst_pts, segW, segH, nRowsImg, nColsImg, mask):
             index_x = int(x_avg/obj_width)
             index_y = int(y_avg/obj_height)
 
-            ### multiple indices by the obj height and width to make index be size of each object ###
+            ### multiple indexes by the obj height and width to make index be size of each object ###
             ### change in index moves one object at a time rather than one pixel at a time ###
             index_x = int((index_x) * obj_width)
             index_y = int((index_y) * obj_height)
@@ -543,7 +543,7 @@ def object_display_image(ref_img, test_img,fixRegionImg, fixPosXY, index_x, inde
     result = cv2.rectangle(ref_img, (index_x, index_y), (index_x + obj_width, index_y+obj_height), GREEN, 6)
 
     ### draw circle around fixation in reference image region ###
-    result = cv2.circle(ref_img, (ref_fix_x, ref_fix_y), 20, BLUE, 3)
+    result = cv2.circle(ref_img, (ref_fix_x, ref_fix_y), 20, WHITE, 3)
 
     ### vstack fixRegion with the frame to create left side of image ###
     left_img = vstack_images(test_img, fixRegionImg, border=2)
@@ -562,7 +562,7 @@ def object_display_image(ref_img, test_img,fixRegionImg, fixPosXY, index_x, inde
     cv2.putText(displayImg, frame_text, (4, 1000), FONT, 4, CYAN, 2, cv2.LINE_AA)
     cv2.putText(displayImg, fix_text, (4, 1150), FONT, 2.5, WHITE, 2, cv2.LINE_AA)
     cv2.putText(displayImg, fix_pos_text, (1, 1200), FONT, 2.5, WHITE, 2, cv2.LINE_AA)
-    cv2.putText(displayImg, ref_fix_text, (2100, 950), FONT, 2, MAGENTA, 2, cv2.LINE_AA)
+    cv2.putText(displayImg, ref_fix_text, (2100, 1150), FONT, 2, MAGENTA, 2, cv2.LINE_AA)
     cv2.putText(displayImg, matches_text, (4, 1250), FONT, 2.5, YELLOW , 1, cv2.LINE_AA)
 
 
@@ -727,6 +727,9 @@ def createRoiDf(roiImg, numSegsX, numSegsY):
 
 ######################################################################################################
 ######################################################################################################
+
+######################################################################################################
+######################################################################################################
 #graspHeatmapRes_yx == [239,200]
 #fixDfin == fixation_dict
 #binPixX == numSegsX
@@ -734,8 +737,7 @@ def createRoiDf(roiImg, numSegsX, numSegsY):
 #gridOffset == (np.shape(templateImg)[0] / graspHeatmapRes_yx[0])/2
 #withDuration should == False
 #use fixationDataPD for ['dur'] --> fixationDataPD['duration']
-def makeHeatMap(fixDfin, numSegsX=5, numSegsY=3, clipIntensityAt = False, templateImage,
-    fixationDataPD,
+def makeHeatMap(templateImg, fixDfin, numSegsX, numSegsY, fixationDataPD,
     #gridSize = 239,
     binPixX = 34.16,
     binPixY = 44.54,
@@ -776,8 +778,8 @@ def makeHeatMap(fixDfin, numSegsX=5, numSegsY=3, clipIntensityAt = False, templa
 
                 # Find fix that lie on the target segment
                 fixInSegDf = fixDfin[ (fixDfin['Xseg'] == segX ) & (fixDfin['Yseg'] ==segY)]
-                fixX = fixInSegDf['fixX'].values
-                fixY = fixInSegDf['fixY'].values
+                fixX = fixInSegDf['RefFixX'].values
+                fixY = fixInSegDf['RefFixY'].values
                 dur = fixationDataPD['duration'].values #get duration from initial fixation.csv file exported from PP
 
                 # Multiply each fix by duration
@@ -790,12 +792,12 @@ def makeHeatMap(fixDfin, numSegsX=5, numSegsY=3, clipIntensityAt = False, templa
             else:
 
                 fixInSegDf = fixDfin[ (fixDfin['Xseg'] == segX ) & (fixDfin['Yseg'] ==segY)]
-                x = fixInSegDf['fixX'].values
-                y = fixInSegDf['fixY'].values
+                x = fixInSegDf['RefFixX'].values
+                y = fixInSegDf['RefFixY'].values
 
             # Make a histogram
             heatmap, yedges, xedges  = np.histogram2d(y, x, bins=(yedges, xedges))
-            heatmap = (255 * (heatmap/np.max(heatmap))).astype(np.uint8)
+            heatmap = (255 * (heatmap // np.max(heatmap))).astype(np.uint8)
             heatmapComposite = heatmapComposite + heatmap
 
             #blurHeatmap = cv2.GaussianBlur(heatmap,(gaussBlurKernel,gaussBlurKernel),0)
@@ -807,52 +809,50 @@ def makeHeatMap(fixDfin, numSegsX=5, numSegsY=3, clipIntensityAt = False, templa
 ##################################################################################################
 ##################################################################################################
 
-def normalizeHeatMapWithinBillFace(heatmapComposite,
+def normalizeHeatMapWithinBillFace(templateImg, histIn_yx,
                                    numSegsX=5,
                                    numSegsY=3,
-                                   gaussStdPx = 33,
-                                   colormap = cv2.COLORMAP_HOT,  # )  # COLORMAP_HOT   COLORMAP_JET
-                                   templateImage,
-                                   heatmapAlpha = 0.6,
+                                   gaussStdPx=33,
+                                   colormap=cv2.COLORMAP_HOT,  # )  # COLORMAP_HOT   COLORMAP_JET
+                                   heatmapAlpha=0.6,
                                    overlay=True):
-
-    assert(np.mod(gaussStdPx,2) == 1), 'gaussStdPx must be an odd number'
+    assert (np.mod(gaussStdPx, 2) == 1), 'gaussStdPx must be an odd number'
 
     # templateImg = cv2.imread(templateImagePath)
+
     imWidth = np.shape(templateImg)[1]
     imHeight = np.shape(templateImg)[0]
 
-    billWidthPx = np.shape(templateImg)[1] / numSegsX
-    billHeightPx = np.shape(templateImg)[0] / numSegsY
+    billWidthPx = imWidth / numSegsX
+    billHeightPx = imHeight / numSegsY
 
     heatmapComposite = np.zeros(np.shape(templateImg), np.uint8)
 
     for segX in range(numSegsX):
         for segY in range(numSegsY):
-
             # Mask the segment in the ROI image
-            lBound = billWidthPx * segX
-            tBound = billHeightPx * segY
+            lBound = int(billWidthPx * segX)
+            tBound = int(billHeightPx * segY)
 
-            bigHeatmap = cv2.resize(histIn_yx,(imWidth,imHeight), interpolation = cv2.INTER_AREA)
+            bigHeatmap = cv2.resize(histIn_yx, (imWidth, imHeight), interpolation=cv2.INTER_AREA)
             segMask = np.zeros(templateImg.shape[:2], np.uint8)
             segMask[tBound:int(tBound + billHeightPx), lBound:int(lBound + billWidthPx)] = 1
 
             bigHeatmapSeg = cv2.bitwise_and(bigHeatmap, bigHeatmap, mask=segMask)
 
-            bigHeatmapSeg = cv2.GaussianBlur(bigHeatmapSeg,(gaussStdPx,gaussStdPx),0)
-            bigHeatmapSeg = (255 * (bigHeatmapSeg/np.max(bigHeatmapSeg))).astype(np.uint8)
+            bigHeatmapSeg = cv2.GaussianBlur(bigHeatmapSeg, (gaussStdPx, gaussStdPx), 0)
+            bigHeatmapSeg = (255 * (bigHeatmapSeg / np.max(bigHeatmapSeg))).astype(np.uint8)
             bigHeatmapSeg = cv2.bitwise_and(bigHeatmapSeg, bigHeatmapSeg, mask=segMask)
 
             colorBlurSegHeatmap = cv2.applyColorMap(bigHeatmapSeg, colormap)  # C
             heatmapComposite = heatmapComposite + colorBlurSegHeatmap
     if overlay:
-        overlayHeatmap = cv2.addWeighted(heatmapComposite,heatmapAlpha,templateImg,1-heatmapAlpha,0)
+        overlayHeatmap = cv2.addWeighted(heatmapComposite, heatmapAlpha, templateImg, 1 - heatmapAlpha, 0)
         overlayHeatmap = cv2.cvtColor(overlayHeatmap, cv2.COLOR_BGR2RGB)
 
         return overlayHeatmap
     else:
-return imStack_xy
+        return heatmapComposite
 
 ##################################################################################################
 ##################################################################################################
