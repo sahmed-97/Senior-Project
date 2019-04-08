@@ -16,6 +16,10 @@ import pickle
 ### set the basePath ###
 basePath = '/Users/sheelaahmed/Desktop/NAS/'
 
+#############################################################
+#### THIS CHANGES DEPENDING ON FILENAMES AND SUBJECTS #######
+#############################################################
+
 refImgFname = basePath + 'Ref_Img_PNG_378x500.png'
 
 ### read in ROI image, ROI Labels pickle file, and DF pickle file ###
@@ -44,13 +48,12 @@ dateStr = time.strftime("%Y-%b-%d")
 #### make a new directory to store each of the images ###
 CodeDir = ('Subject {}_Results_{}'.format(subjNum, timeStr))
 os.makedirs(CodeDir)
-
 # subj = 'mag_advertisements_{}'.format(trialNum)
 trial = '/trial2/'
 fixations = '/exports/000/'
 
 ### filename stuff for when I move onto the videos ####
-# subj = 'NAS_1_S{}/'.format(subjNum)
+# subj = 'NAS_1_S{}/'.format(subjNum) #subjNum for cash handling study
 subj = 'magazine_testing/'
 subjPath = basePath + subj
 trialPath = subjPath + trial + fixations
@@ -61,6 +64,8 @@ end_fixation = 85 # to code all
 ### list of fixations to exclude(calibration etc) ###
 # exclude_fixations = []
 exclude_fixations = list(np.r_[130:136])
+
+################################################################################################
 
 ### define video and csv filenames ###
 # videoFname = basePath + 'vlc-record-2019-02-18-10h47m24s-world.mp4' ### new cropped video file for testing! ###
@@ -129,14 +134,10 @@ print("nFixations = {} - excluded fixations {} = {} fixations to code".format(nF
 
 
 ### get dictionary of all elements in raw video ###
-# vidObjDict, avObj, streamObj, ticksPerFrame = fn.open_raw_mp4(subjPath + rawVideoFname)
+# vidObjDict, avObj, streamObj, ticksPerFrame = fn.open_raw_mp4(subjPath + rawVideoFname) #video for the cash handling video
 vidObjDict, avObj, streamObj, ticksPerFrame = fn.open_raw_mp4(subjPath + trial + rawVideoFname)
 vidObjDict['fName'] = rawVideoFname
 videoWH = vidObjDict['width'], vidObjDict['height']
-
-#### startatFix is in the setup_run function ###
-#### basically move all important stuff from that function into this code ###
-#### only focus on one subject at a time ###
 
 ### Index into table is fixation# - 1 ##
 fixTableIdx = start_fixation - 1
@@ -162,8 +163,6 @@ csv_object_header = ' Xseg,Yseg,Frame,Fixation,FrameFixX,' \
                 'FrameFixY,RefFixX,RefFixY, nearestROI'
 output_string_object = []
 
-# fixation_dict_header = 'Xseg,Yseg,norm_pos_x,norm_pos_y'
-
 ### initialize dictionary to fill with fixations and segments ###
 ###to be used in distToROI at end ######
 fixation_dict = {}
@@ -178,7 +177,6 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
 
     ###define current frame as it iterates through the table ###
     currentFrame = nextFixationFrame
-    # firstFixationFrame = nextFixationFrame
 
     # if currentFrame < firstFixationFrame:
     # fn.skip_forward_to_first_desired_frame(vidObjDict['vidObj'], firstFixationFrame, currentFrame)
@@ -215,10 +213,12 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
             currentFrame += 1
 
         ##################################################################
-        ######## same with object detection --> try/except      ##########
+        ############# object detection --> try/except      ###############
         ##################################################################
         try:
             index_x, index_y, obj_height, obj_width, x_avg, y_avg = fn.object_detect(ref_img, distance_points, segW, segH, nRowsRefImg, nColsRefImg, mask)
+
+        ### if I get an error dealing with there being no index_x or index_y, set those == 0 and obj_width, obj_height == 1 ###
         except Exception as errMsg:
             print("Error has occured for frame {} ... {}".format(currentFrame, errMsg))
             index_x = 0
@@ -295,78 +295,73 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
 
     fixTableIdx = fixTableIdx + 1
 
-# print('fixation dict')
-# print(fixation_dict)
-
 fixation_dict = pd.DataFrame(output_string_object)
-# fixation_dict.drop([fixation_dict['refFixX'] == -1].index)
-# fixation_dict.drop([fixation_dict['refFixY'] == -1].index)
-#
-# print('fixation dict')
-# print(fixation_dict)
-# print('ROI Df')
-# print(roiDf)
+
+print('ROI Df')
+print(roiDf)
 
 ##########################################################################################
 ####### use new fixations in reference image to begin calculating distance to ROI ########
 ####### as well as other visualizations i.e. heat maps, plots of fixations, etc... #######
 ##########################################################################################
 
-# # Normalize fixation locations within the image
+### Normalize fixation locations within the image ###
 fixation_dict['fixNormX'] = fixation_dict['fixX'] / np.shape(ref_Img)[1]
 fixation_dict['fixNormY'] = fixation_dict['fixY'] / np.shape(ref_Img)[0]
 
+### calculate the min distances to ROIs ###
+distToROI_fix = fixation_dict.apply(lambda row: fn.find_min_dist_to_ROI(row,roiDf,fixationDataPD, roiImage, nRowsRefImg, nColsRefImg),axis=1)
 
-# distToROI_fix = fixation_dict.apply(lambda row: fn.find_min_dist_to_ROI(row,roiDf,fixationDataPD, roiImage, nRowsRefImg, nColsRefImg),axis=1)
-# print(distToROI_fix)
-
-# Add the values implied by dict keys in distToROI_fix to fixDf
-# fixation_dict = fixation_dict.combine_first(pd.DataFrame.from_records(distToROI_fix))
-# fixation_dict['subjectID'] = subID
-# print('ROI matches')
-# print(distToROI_fix)
+### Add the values implied by dict keys in distToROI_fix to fixation_dict ###
+fixation_dict = fixation_dict.combine_first(pd.DataFrame.from_records(distToROI_fix))
 
 print('fixation dictionary')
 print(fixation_dict)
-#
-nearestROIVals = fixation_dict['nearestROI'] #### NEED TO EDIT STILL ###
 
-pd.DataFrame(fixation_dict).hist(column='nearestROI')
+##############################################################
+############# HISTOGRAM OF ROI MATCHES #######################
+##############################################################
+### TO DO: EDIT ###
+nearestROIVals = fixation_dict[fixation_dict['distToNearestROI'] < 5]  #### NEED TO EDIT STILL ### --> set threshold for distances to only include those in histogram
+
+pd.DataFrame(nearestROIVals).hist(column='nearestROI') # --> try this out and see if it works properly!
 # fixation_dict.to_pickle(pickle_object_filename)
 
-################################################################################
-####### PLOTTING HEAT MAPS ###############
+### ^^^add idx column to RoiLabels excel spreadsheet --> match that idx to the idx of nearestROI and plot the Lables instead of numbers
 
-graspHeatmapRes_yx = [239,200]
-scaleFactor = np.shape(ref_Img)[1] / graspHeatmapRes_yx[1]
+###############################################
+########## PLOTTING HEAT MAPS #################
+###############################################
 
-binPixX = np.shape(ref_Img)[1] / graspHeatmapRes_yx[1]
-binPixY = np.shape(ref_Img)[0] / graspHeatmapRes_yx[0]
-gridOffset = (np.shape(ref_Img)[0] / graspHeatmapRes_yx[0])/2
+### define values of bins and offsets
+binPixX = 34.16
+binPixY = 44.54
+gridOffset = 0
 
+### first make heat map composite
 subHeatMap_xy = fn.makeHeatMap(ref_Img, fixation_dict, nColsRefImg, nRowsRefImg, fixationDataPD, binPixX, binPixY, gridOffset, withDuration=False)
 
-# gaussStdPx = np.int(scaleFactor * 2)
-# print(gaussStdPx)
+### define std. deviation for gaussian blur part of next fn
 gaussStdPx = 129
-
 if np.mod(gaussStdPx,2) == 0: #has to be odd
     gaussStdPx = gaussStdPx+1
 
 subHeatMap_xy = np.array(subHeatMap_xy,dtype=np.uint8)
 
+### normalize heat map
 imStack_xy = fn.normalizeHeatMapWithinBillFace(ref_Img, subHeatMap_xy, numSegsX=5,numSegsY=3,
                                     gaussStdPx = gaussStdPx, colormap=cv2.COLORMAP_HOT,# )  # COLORMAP_HOT   COLORMAP_JET
                                     heatmapAlpha=0.6,
                                    overlay=True)
 
+### plot heat map
 fig, ax = plt.subplots(figsize=(8, 8), dpi= 300, facecolor='w', edgecolor='k')
 ax.imshow(imStack_xy)
-# ax.imshow(imStack_xy[:np.shape(imStack_xy)[0]/2,:,:])
 ax.axis('off')
 
 ################################################################################
-### plot reference fixations onto reference image ###
+############### PLOT REFERENCE FIXATIONS ONTO REFERENCE IMAGE ##################
+################################################################################
 figure, axis = plt.subplots(figsize = (15,15), dpi = 80, facecolor = 'w', edgecolor = 'k')
 axis.imshow(ref_img)
 plt.xlim([0, np.shape(ref_img)[1]])
@@ -377,7 +372,8 @@ plt.show()
 plt.savefig(basePath + 'Subject_{}_Fixation_Plot_{}.png'.format(subjNum, timeStr), bbox_inches='tight', transparent=True)
 cv2.destroyAllWindows()
 
-
-### print out total time it took ###
+####################################
+###### PRINT ELAPSED TIME ##########
+####################################
 elapsedTime = time.time() - startTime
 print('Subject {} process is complete. Elapsed time is {} for {} fixations'.format(subjNum, elapsedTime, end_fixation - start_fixation))

@@ -727,9 +727,6 @@ def createRoiDf(roiImg, numSegsX, numSegsY):
 
 ######################################################################################################
 ######################################################################################################
-
-######################################################################################################
-######################################################################################################
 #graspHeatmapRes_yx == [239,200]
 #fixDfin == fixation_dict
 #binPixX == numSegsX
@@ -747,16 +744,12 @@ def makeHeatMap(templateImg, fixDfin, numSegsX, numSegsY, fixationDataPD,
 
     COLORMAP = cv2.COLORMAP_HOT  # )  # COLORMAP_HOT   COLORMAP_JET
 
-    # templateImg = cv2.imread(templateImagePath)
-
-
     imWidth = np.shape(templateImg)[1]
     imHeight = np.shape(templateImg)[0]
 
     # Find pixels in the segment
     billHeightPx = np.shape(templateImg)[0] / numSegsY
     billWidthPx = np.shape(templateImg)[1] / numSegsX
-
 
     #binSizePx = imHeight/gridSize
     xedges = np.arange(gridOffset, imWidth+binPixX, binPixX)
@@ -772,7 +765,6 @@ def makeHeatMap(templateImg, fixDfin, numSegsX, numSegsY, fixationDataPD,
             tBound = int(billHeightPx * segY)
             segMask = np.zeros(templateImg.shape[:2], np.uint8)
             segMask[tBound:int(tBound + billHeightPx), lBound:int(lBound + billWidthPx)] = 1
-
 
             if withDuration == True:
 
@@ -790,7 +782,6 @@ def makeHeatMap(templateImg, fixDfin, numSegsX, numSegsY, fixationDataPD,
                     y = np.hstack([y,[fixY[idx]]*int(dur[idx])])
 
             else:
-
                 fixInSegDf = fixDfin[ (fixDfin['Xseg'] == segX ) & (fixDfin['Yseg'] ==segY)]
                 x = fixInSegDf['RefFixX'].values
                 y = fixInSegDf['RefFixY'].values
@@ -799,10 +790,6 @@ def makeHeatMap(templateImg, fixDfin, numSegsX, numSegsY, fixationDataPD,
             heatmap, yedges, xedges  = np.histogram2d(y, x, bins=(yedges, xedges))
             heatmap = (255 * (heatmap // np.max(heatmap))).astype(np.uint8)
             heatmapComposite = heatmapComposite + heatmap
-
-            #blurHeatmap = cv2.GaussianBlur(heatmap,(gaussBlurKernel,gaussBlurKernel),0)
-            #blurHeatmap = (255 * (blurHeatmap/np.max(blurHeatmap))).astype(np.uint8)
-            #heatmapComposite = heatmapComposite + blurHeatmap
 
     return heatmapComposite
 
@@ -817,8 +804,6 @@ def normalizeHeatMapWithinBillFace(templateImg, histIn_yx,
                                    heatmapAlpha=0.6,
                                    overlay=True):
     assert (np.mod(gaussStdPx, 2) == 1), 'gaussStdPx must be an odd number'
-
-    # templateImg = cv2.imread(templateImagePath)
 
     imWidth = np.shape(templateImg)[1]
     imHeight = np.shape(templateImg)[0]
