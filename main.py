@@ -11,7 +11,7 @@ import pandas as pd
 import av
 import matplotlib.pyplot as plt
 import pickle
-
+from textwrap import wrap
 
 ### set the basePath ###
 basePath = '/Users/sheelaahmed/Desktop/NAS/'
@@ -20,20 +20,28 @@ basePath = '/Users/sheelaahmed/Desktop/NAS/'
 #### THIS CHANGES DEPENDING ON FILENAMES AND SUBJECTS #######
 #############################################################
 
-refImgFname = basePath + 'Ref_Img_PNG_378x500.png'
+# refImgFname = basePath + 'RefImg_Series_205x490_PhaseII.jpg'
+refImgFname = basePath + 'RefImg_Series_205x490.jpg'
 
 ### read in ROI image, ROI Labels pickle file, and DF pickle file ###
-roiImagePath = basePath + 'mag_roi_gray.png'
+roiImagePath = basePath + 'mag_roi.png'
+# roiImagePath = basePath + 'roi200.png'
 roiImage = cv2.imread(roiImagePath)
 
-# roiLabelsPath = basePath + 'roiLabels.xlsx'
-# roiLabels = pd.read_excel(roiLabelsPath)
+# roiLabelsPath = basePath + 'roiLabelsFinal.csv'
+# roiLabels = pd.read_csv(roiLabelsPath)
+roiLabelsPath = basePath + 'roiLabels.xlsx'
+roiLabels = pd.read_excel(roiLabelsPath)
 
-roiDfPath = basePath + 'ROIDataframeMagazines.pickle'
+# roiDfPath = basePath + 'ROIDataframeMagazines_without_gray2.csv'
+roiDfPath = basePath + 'ROIDataframeMagazines_noGray.pickle'
+# roiDfPath = basePath + 'roiCache.pickle'
+
+# roiDf = pd.read_csv(roiDfPath)
 roiDf = pd.read_pickle(roiDfPath)
 
 ### DEFINE SUBJECT NUMBER ###
-subjNum = 2
+subjNum = 35
 
 ### read in the reference image ###
 ref_Img = cv2.imread(refImgFname)  # ref image
@@ -46,24 +54,25 @@ timeStr = time.strftime("%Y-%b-%d_%Hh%Mm")
 dateStr = time.strftime("%Y-%b-%d")
 
 #### make a new directory to store each of the images ###
-CodeDir = ('Subject {}_Results_{}'.format(subjNum, timeStr))
+CodeDir = ('NAS_Results_{}'.format(timeStr))
 os.makedirs(CodeDir)
 # subj = 'mag_advertisements_{}'.format(trialNum)
-trial = '/trial2/'
-fixations = '/exports/000/'
-
+# trial = '/002/'
+# fixations = '/exports/000/'
 ### filename stuff for when I move onto the videos ####
-# subj = 'NAS_1_S{}/'.format(subjNum) #subjNum for cash handling study
-subj = 'magazine_testing/'
+subj = 'NAS_1_S{}/'.format(subjNum) #subjNum for cash handling study
+# subj = 'magazine_testing/'
+# subj = '2019_04_08'
 subjPath = basePath + subj
-trialPath = subjPath + trial + fixations
+# trialPath = subjPath + trial + fixations
+trialPath = subjPath + '/00_00_000-43_54_973/'
 
-start_fixation = 80  # 330  # S28: Frames 6160 - 26350 = Fixations 300 - 3451
-end_fixation = 85 # to code all
+start_fixation = 2850 #38  # 330  # S28: Frames 6160 - 26350 = Fixations 300 - 3451
+end_fixation = 2860 #125 # to code all
 
 ### list of fixations to exclude(calibration etc) ###
-# exclude_fixations = []
-exclude_fixations = list(np.r_[130:136])
+exclude_fixations = []
+# exclude_fixations = list(np.r_[149:152])
 
 ################################################################################################
 
@@ -73,8 +82,8 @@ rawVideoFname = 'world.mp4'  # raw mp4 video.
 fixationCSVfName = trialPath+'fixations.csv'  # sample csv file with Frame, X, Y of fixations
 
 ########### set up filenames for new csv files to be exported ###########
-pickle_object_filename = 'Subject_{}_Fixations_{}.pickle'.format(subjNum, timeStr)
-csv_ROI_filename = 'Subject_{}_ROI_Results_{}.csv'.format(subjNum, timeStr)
+pickle_object_filename = 'NAS_Fixations_{}.pickle'.format(timeStr)
+# csv_ROI_filename = 'Subject_{}_ROI_Results_{}.csv'.format(subjNum, timeStr)
 
 ### define all different colors to use in the rest of the program ###
 BLACK = (0, 0, 0)
@@ -134,8 +143,8 @@ print("nFixations = {} - excluded fixations {} = {} fixations to code".format(nF
 
 
 ### get dictionary of all elements in raw video ###
-# vidObjDict, avObj, streamObj, ticksPerFrame = fn.open_raw_mp4(subjPath + rawVideoFname) #video for the cash handling video
-vidObjDict, avObj, streamObj, ticksPerFrame = fn.open_raw_mp4(subjPath + trial + rawVideoFname)
+vidObjDict, avObj, streamObj, ticksPerFrame = fn.open_raw_mp4(subjPath + rawVideoFname) #video for the cash handling video
+# vidObjDict, avObj, streamObj, ticksPerFrame = fn.open_raw_mp4(subjPath + trial + rawVideoFname)
 vidObjDict['fName'] = rawVideoFname
 videoWH = vidObjDict['width'], vidObjDict['height']
 
@@ -159,17 +168,17 @@ reference_frame_fixations = []
 
 ################################################################
 ### create headers and strings for csv files to be exported ###
-csv_object_header = ' Xseg,Yseg,Frame,Fixation,FrameFixX,' \
-                'FrameFixY,RefFixX,RefFixY, nearestROI'
+# csv_object_header = ' Xseg,Yseg,Frame,Fixation, Duration, FrameFixX,' \
+#                 'FrameFixY,RefFixX,RefFixY, nearestROI'
 output_string_object = []
 
-### initialize dictionary to fill with fixations and segments ###
-###to be used in distToROI at end ######
+# initialize dictionary to fill with fixations and segments ###
+#to be used in distToROI at end ######
 fixation_dict = {}
 
-####################################
-### begin looping through frames ###
-####################################
+###################################
+## begin looping through frames ###
+###################################
 while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
 
     ### make a copy of the reference image ###
@@ -273,7 +282,7 @@ while currentFrame < min(NFRAMES, vidObjDict['nFrames'] - 1):
         # output_string_list = "{}, {}, {}, {}, {}, {}, {}, {}".format(ref_pos_x, ref_pos_y, currentFrame, fixTableIdx, fixPosXY[0],
         #                                                 fixPosXY[1], ref_fix[0], ref_fix[1])
 
-        output_string_list = {'Xseg':ref_pos_x,'Yseg':ref_pos_y,'Frame':currentFrame,'Fixation':fixTableIdx,'fixX':fixPosXY[0]
+        output_string_list = {'Xseg':ref_pos_x,'Yseg':ref_pos_y,'Frame':currentFrame,'Fixation':fixTableIdx,'Duration': fixDur, 'fixX':fixPosXY[0]
                                  ,'fixY':fixPosXY[1],'RefFixX':ref_fix[0],'RefFixY':ref_fix[1]}
         output_string_object.append(output_string_list)
 
@@ -318,14 +327,34 @@ fixation_dict = fixation_dict.combine_first(pd.DataFrame.from_records(distToROI_
 print('fixation dictionary')
 print(fixation_dict)
 
+labelList = roiLabels['label']
+print(labelList)
+
+
+# factor = 10
+# fixation_dict = pd.read_pickle(basePath + 'NAS_Fixations_2019-Apr-23_12h14m.pickle')
+# print('fixation dictionary')
+print(fixation_dict['distToNearestROI'])
 ##############################################################
 ############# HISTOGRAM OF ROI MATCHES #######################
 ##############################################################
 ### TO DO: EDIT ###
-nearestROIVals = fixation_dict[fixation_dict['distToNearestROI'] < 5]  #### NEED TO EDIT STILL ### --> set threshold for distances to only include those in histogram
+# nearestROIVals = fixation_dict[fixation_dict['distToNearestROI'] < .6]  #### NEED TO EDIT STILL ### --> set threshold for distances to only include those in histogram
+#
+# p = nearestROIVals['nearestROI'].plot(kind='bar', x='labels',legend=False, color='teal')
+# p.tick_params(axis='both', which='major', labelsize=4.5)
+# # p = pd.DataFrame(nearestROIVals).hist(column='nearestROI') # --> try this out and see if it works properly!
+# p.axes.set_xticklabels(['\n'.join(wrap(l, 10)) for l in labelList])
+# p.set_ylabel('Number of Fixations',fontsize = 13)
+# plt.xticks(rotation = 90)
+# plt.xlim(0,22.5)
+# p.axes.yaxis.grid(True)
+# p.axes.set_axisbelow(True)
+# plt.savefig(basePath + 'Subject_{}_Histogram_Plot_{}.png'.format(subjNum, timeStr), dpi=300, bbox_inches='tight', transparent=True)
 
-pd.DataFrame(nearestROIVals).hist(column='nearestROI') # --> try this out and see if it works properly!
-# fixation_dict.to_pickle(pickle_object_filename)
+
+### write out pickle file of data collected ###
+fixation_dict.to_pickle(pickle_object_filename)
 
 ### ^^^add idx column to RoiLabels excel spreadsheet --> match that idx to the idx of nearestROI and plot the Lables instead of numbers
 
@@ -334,28 +363,28 @@ pd.DataFrame(nearestROIVals).hist(column='nearestROI') # --> try this out and se
 ###############################################
 
 ### define values of bins and offsets
-binPixX = 34.16
-binPixY = 44.54
+binPixX = 34.5
+binPixY = 44.5
 gridOffset = 0
 
 ### first make heat map composite
-subHeatMap_xy = fn.makeHeatMap(ref_Img, fixation_dict, nColsRefImg, nRowsRefImg, fixationDataPD, binPixX, binPixY, gridOffset, withDuration=False)
+subHeatMap_xy = fn.makeHeatMap(ref_Img, fixation_dict, nColsRefImg, nRowsRefImg, fixationDataPD, binPixX, binPixY, gridOffset, withDuration=True)
 
 ### define std. deviation for gaussian blur part of next fn
-gaussStdPx = 129
+gaussStdPx = 350
 if np.mod(gaussStdPx,2) == 0: #has to be odd
     gaussStdPx = gaussStdPx+1
 
 subHeatMap_xy = np.array(subHeatMap_xy,dtype=np.uint8)
 
 ### normalize heat map
-imStack_xy = fn.normalizeHeatMapWithinBillFace(ref_Img, subHeatMap_xy, numSegsX=5,numSegsY=3,
+imStack_xy = fn.normalizeHeatMapWithinBillFace(ref_Img, subHeatMap_xy, numSegsX=8,numSegsY=4,
                                     gaussStdPx = gaussStdPx, colormap=cv2.COLORMAP_HOT,# )  # COLORMAP_HOT   COLORMAP_JET
                                     heatmapAlpha=0.6,
-                                   overlay=True)
+                                   overlay=False)
 
 ### plot heat map
-fig, ax = plt.subplots(figsize=(8, 8), dpi= 300, facecolor='w', edgecolor='k')
+fig, ax = plt.subplots(figsize=(8, 8), dpi= 400, facecolor='w', edgecolor='k')
 ax.imshow(imStack_xy)
 ax.axis('off')
 
@@ -363,13 +392,14 @@ ax.axis('off')
 ############### PLOT REFERENCE FIXATIONS ONTO REFERENCE IMAGE ##################
 ################################################################################
 figure, axis = plt.subplots(figsize = (15,15), dpi = 80, facecolor = 'w', edgecolor = 'k')
-axis.imshow(ref_img)
-plt.xlim([0, np.shape(ref_img)[1]])
-plt.ylim([np.shape(ref_img)[0], 0])
+axis.imshow(ref_Img)
+axis.axis('off')
+plt.xlim([0, np.shape(ref_Img)[1]])
+plt.ylim([np.shape(ref_Img)[0], 0])
 for x, y in reference_frame_fixations:
     plt.scatter(x, y, s = 20, c = 'r')
 plt.show()
-plt.savefig(basePath + 'Subject_{}_Fixation_Plot_{}.png'.format(subjNum, timeStr), bbox_inches='tight', transparent=True)
+plt.savefig(basePath + 'Subject_{}_MappedFixations_{}.png'.format(subjNum, timeStr), bbox_inches='tight', transparent=True)
 cv2.destroyAllWindows()
 
 ####################################
@@ -377,3 +407,4 @@ cv2.destroyAllWindows()
 ####################################
 elapsedTime = time.time() - startTime
 print('Subject {} process is complete. Elapsed time is {} for {} fixations'.format(subjNum, elapsedTime, end_fixation - start_fixation))
+print('Done!')

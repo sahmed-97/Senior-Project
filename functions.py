@@ -632,7 +632,12 @@ def find_min_dist_to_ROI(fixIn, roiDf, fixationDataPD, roi_image, nRowsImg, nCol
                                for mask_yx in np.array(np.where(colorMask)).T]
         # print(distToPixelInRoi_px)
 
-        min = np.min(distToPixelInRoi_px)
+        try:
+            min = np.min(distToPixelInRoi_px)
+        except Exception as errMsg:
+            min = 5
+        # except Exception as errMsg:
+        #     min =
 
         # minDist to ROI of ALL ROI
         return min
@@ -672,10 +677,12 @@ def find_min_dist_to_ROI(fixIn, roiDf, fixationDataPD, roi_image, nRowsImg, nCol
         minIdx = roiInSegDf['idx'].iloc[np.nanargmin(minDistToROI_roi)]
         # minVal = np.nanmin(minDistToROI_roi[np.isfinite(minDistToROI_roi)])  # nan min was having issues.
         minVal = np.min(minDistToROI_roi)
+        # label = roiDf['Label'[minIdx]] ### include the label from the ROI labels csv --> to label ROIs when making histogram
 
     minVal = minVal / np.min([billHeightPx, billWidthPx])
 
     #return {'nearestROI': minIdx, 'distToNearestROI': minVal, 'roiDistances': np.array(minDistToROI_roi.values,dtype=np.float) }
+    # return {'nearestROI': minIdx, 'distToNearestROI': minVal, 'Label': label} ### added a label for each ROI 4/9/19
     return {'nearestROI': minIdx, 'distToNearestROI': minVal}
 
 ######################################################################################################
@@ -727,6 +734,9 @@ def createRoiDf(roiImg, numSegsX, numSegsY):
 
 ######################################################################################################
 ######################################################################################################
+
+######################################################################################################
+######################################################################################################
 #graspHeatmapRes_yx == [239,200]
 #fixDfin == fixation_dict
 #binPixX == numSegsX
@@ -744,12 +754,16 @@ def makeHeatMap(templateImg, fixDfin, numSegsX, numSegsY, fixationDataPD,
 
     COLORMAP = cv2.COLORMAP_HOT  # )  # COLORMAP_HOT   COLORMAP_JET
 
+    # templateImg = cv2.imread(templateImagePath)
+
+
     imWidth = np.shape(templateImg)[1]
     imHeight = np.shape(templateImg)[0]
 
     # Find pixels in the segment
     billHeightPx = np.shape(templateImg)[0] / numSegsY
     billWidthPx = np.shape(templateImg)[1] / numSegsX
+
 
     #binSizePx = imHeight/gridSize
     xedges = np.arange(gridOffset, imWidth+binPixX, binPixX)
@@ -766,22 +780,27 @@ def makeHeatMap(templateImg, fixDfin, numSegsX, numSegsY, fixationDataPD,
             segMask = np.zeros(templateImg.shape[:2], np.uint8)
             segMask[tBound:int(tBound + billHeightPx), lBound:int(lBound + billWidthPx)] = 1
 
+
             if withDuration == True:
 
                 # Find fix that lie on the target segment
                 fixInSegDf = fixDfin[ (fixDfin['Xseg'] == segX ) & (fixDfin['Yseg'] ==segY)]
                 fixX = fixInSegDf['RefFixX'].values
+                # fixX.T
                 fixY = fixInSegDf['RefFixY'].values
-                dur = fixationDataPD['duration'].values #get duration from initial fixation.csv file exported from PP
+                # fixY.T
+                dur = fixInSegDf['Duration'].values #get duration from initial fixation.csv file exported from PP
 
                 # Multiply each fix by duration
                 x = []
                 y = []
-                for idx in range(len(dur)):
+                idx = 0
+                for idx in range(len(fixInSegDf)): ###changed from dur to fixInSegDf ### works because fixationDataPD is every single fixation
                     x = np.hstack([x,[fixX[idx]]*int(dur[idx])])
                     y = np.hstack([y,[fixY[idx]]*int(dur[idx])])
 
             else:
+
                 fixInSegDf = fixDfin[ (fixDfin['Xseg'] == segX ) & (fixDfin['Yseg'] ==segY)]
                 x = fixInSegDf['RefFixX'].values
                 y = fixInSegDf['RefFixY'].values
@@ -790,6 +809,10 @@ def makeHeatMap(templateImg, fixDfin, numSegsX, numSegsY, fixationDataPD,
             heatmap, yedges, xedges  = np.histogram2d(y, x, bins=(yedges, xedges))
             heatmap = (255 * (heatmap // np.max(heatmap))).astype(np.uint8)
             heatmapComposite = heatmapComposite + heatmap
+
+            #blurHeatmap = cv2.GaussianBlur(heatmap,(gaussBlurKernel,gaussBlurKernel),0)
+            #blurHeatmap = (255 * (blurHeatmap/np.max(blurHeatmap))).astype(np.uint8)
+            #heatmapComposite = heatmapComposite + blurHeatmap
 
     return heatmapComposite
 
@@ -804,6 +827,8 @@ def normalizeHeatMapWithinBillFace(templateImg, histIn_yx,
                                    heatmapAlpha=0.6,
                                    overlay=True):
     assert (np.mod(gaussStdPx, 2) == 1), 'gaussStdPx must be an odd number'
+
+    # templateImg = cv2.imread(templateImagePath)
 
     imWidth = np.shape(templateImg)[1]
     imHeight = np.shape(templateImg)[0]
